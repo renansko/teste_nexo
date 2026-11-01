@@ -1,5 +1,5 @@
 # Uso: crie um `.env` a partir do `.env.example` (ANTHROPIC_API_KEY e NEXO_AUTH_SECRET) e rode `docker compose up --build`.
-# App em http://localhost:3000 (ou NEXO_PORT). Abra por "localhost": o cookie de sessão é Secure em produção.
+# App em http://localhost:3000 (ou NEXO_PORT). Atrás de proxy TLS, envie x-forwarded-proto: https (cookie Secure).
 services:
   app:
     build: .
