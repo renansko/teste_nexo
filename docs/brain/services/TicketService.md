@@ -5,5 +5,6 @@ Sistema de chamados SIMULADO (legado). Código: `src/services/tickets/ticketServ
 - Não conhece agent, conversa nem LLM. Único consumidor com LLM: as tools da persona ([NexoAssistant](NexoAssistant.md)); sem LLM: executores, rotas `/api/tickets` e console.
 - API pública passa por `legacyGateway.call` ([LegacyOutage](../conventions/LegacyOutage.md)): `createTicket`, `getTicket`, `getTicketForRequester`, `listTickets`, `listUpdates`, `addTicketUpdate`, `updateTicketStatus`, `reopenTicket`, `findRelatedTickets`.
 - `insertTicketRaw`/`insertUpdateRaw`/`countTickets` não passam pelo gateway: só seed e testes.
+- Pré-condições de escrita vivem só aqui: `assertCanUpdate` (chamado aberto) e `assertCanReopen` (resolvido há ≤ 7 dias). A tool chama antes de montar o rascunho; `addTicketUpdate`/`reopenTicket` chamam de novo no commit. Não reimplementar nas tools.
 - Todas as operações aceitam `now` para determinismo em testes.
 - Para trocar por um ITSM real, substitua este módulo mantendo as funções e a entidade [Ticket](../entities/Ticket.md); as regras de prazo/prioridade podem ir junto (são do sistema de chamados, não do agent).

@@ -11,3 +11,4 @@
 - 2026-11-01 | docker | Dockerfile (Next standalone, Node 24) e docker-compose com volume para o SQLite.
 - 2026-11-01 | llm | Provedor do LLM configurável (`NEXO_LLM_PROVIDER`); padrão passa a ser OpenAI `gpt-5-mini`.
 - 2026-11-01 | env | Environment: `.env` validado com zod (`src/lib/env.ts`) e checagem no boot via `instrumentation.ts`.
+- 2026-11-01 | estrutura | Model router do Mastra (`NEXO_MODEL=openai/gpt-6-luna`, sem `NEXO_LLM_PROVIDER` nem `@ai-sdk/*`); retry nas rotas `/api/tickets`; `assertCanUpdate`/`assertCanReopen` no TicketService.

@@ -85,6 +85,18 @@ export function countTickets(): number {
   return (getDb().prepare(`SELECT COUNT(*) AS n FROM tickets`).get() as { n: number }).n;
 }
 
+// ---- Pré-condições de escrita (mesmas regras na tool, que monta o rascunho, e no commit) ----
+
+/** Só chamados abertos aceitam complemento. */
+export function assertCanUpdate(t: Ticket): void {
+  if (!isOpenStatus(t.status)) throw new AppError("TICKET_NOT_OPEN", `O chamado ${t.id} não está aberto (${STATUS_LABEL[t.status]}).`, 409);
+}
+
+/** Só chamados resolvidos há até 7 dias podem ser reabertos. */
+export function assertCanReopen(t: Ticket, now = new Date()): void {
+  if (!canReopen(t, now)) throw new AppError("REOPEN_NOT_ALLOWED", `O chamado ${t.id} não pode ser reaberto: só chamados resolvidos há até 7 dias.`, 409);
+}
+
 // ---- API pública (passa pelo gateway legado) ----
 
 export function createTicket(input: NewTicket, now = new Date()): Ticket {
@@ -145,7 +157,7 @@ export function addTicketUpdate(
     transaction(() => {
       const t = getRaw(id);
       if (!t) throw notFound("Chamado");
-      if (!isOpenStatus(t.status)) throw new AppError("TICKET_NOT_OPEN", "Chamado não está aberto", 409);
+      assertCanUpdate(t);
       const iso = now.toISOString();
       insertUpdateRaw({ ticketId: id, ...update, createdAt: iso });
       getDb().prepare(`UPDATE tickets SET updated_at = ?, due_at = ? WHERE id = ?`)
@@ -172,7 +184,7 @@ export function reopenTicket(id: string, reason: { authorId: string; text: strin
     transaction(() => {
       const t = getRaw(id);
       if (!t) throw notFound("Chamado");
-      if (!canReopen(t, now)) throw new AppError("REOPEN_NOT_ALLOWED", "Só chamados resolvidos há até 7 dias podem ser reabertos", 409);
+      assertCanReopen(t, now);
       const iso = now.toISOString();
       insertUpdateRaw({ ticketId: id, authorId: reason.authorId, authorRole: "employee", text: `Reaberto: ${reason.text}`, createdAt: iso });
       getDb().prepare(`UPDATE tickets SET status = 'aberto', updated_at = ?, due_at = ?, resolved_at = NULL WHERE id = ?`)
