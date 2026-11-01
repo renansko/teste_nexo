@@ -22,6 +22,7 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 - Opções e cards só aceitam clique na última mensagem do agent com estado `agent` e sem turno em andamento. Clique em opção envia `{optionId, text: label}`; clique num chamado do seletor envia texto `"<id> · <título>"`.
 - Rascunho (`draft`): as opções da mesma mensagem viram a barra de ações do card. Ids `confirm` / `edit:<campo>` / `cancel` definem o estilo do botão.
 - Contador `userMessages/limit` vem do backend; atingido o limite, o composer bloqueia e oferece nova conversa.
+- Texto do agent/analista (e o parcial do streaming) passa por `RichText` (`src/components/chat/RichText.tsx`): Markdown leve (`**negrito**`, `*itálico*`, `` `código` ``, listas `-`/`1.`, parágrafos) vira elementos React, sem HTML cru. Mensagens do funcionário ficam em texto puro. Outra sintaxe aparece literal: as instruções pedem ao modelo "sem markdown pesado".
 
 ## Pendências
 

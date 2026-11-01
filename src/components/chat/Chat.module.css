@@ -112,6 +112,36 @@
 .text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text p,
+.text ul,
+.text ol {
+  margin: 0;
+}
+
+.text ul,
+.text ol {
+  padding-left: 20px;
+}
+
+.text li + li {
+  margin-top: 2px;
+}
+
+.text strong {
+  font-weight: 600;
+}
+
+.text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
 }
 
 .system {

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Check, LoaderCircle, MessageCircleQuestion, X } from "lucide-react";
 import type { ChatMessage, Option, TicketView, TraceAction } from "@/lib/api";
 import { looseOptions, OptionChips, PayloadCards } from "./payload/Payload";
+import { RichText } from "./RichText";
 import styles from "./Chat.module.css";
 
 const AUTHOR = { agent: "Nexo Assist", analyst: "Analista" } as const;
@@ -58,7 +59,7 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
             <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions}>
               {(m.content || chips) && (
                 <div className={styles.agentBubble}>
-                  {m.content && <div className={styles.text}>{m.content}</div>}
+                  {m.content && <RichText className={styles.text} text={m.content} />}
                   {chips && <OptionChips options={chips} {...handlers} />}
                 </div>
               )}
@@ -70,7 +71,7 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
           <AgentMessage who="Nexo Assist" actions={streaming.actions} live>
             <div className={styles.agentBubble}>
               {streaming.text ? (
-                <div className={styles.text}>{streaming.text}</div>
+                <RichText className={styles.text} text={streaming.text} />
               ) : (
                 <span className={styles.typing} aria-label="Nexo Assist está escrevendo">
                   <i />
