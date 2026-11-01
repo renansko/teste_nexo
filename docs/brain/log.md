@@ -9,3 +9,4 @@
 - 2026-11-01 | etapa 6 | README, páginas do Brain reescritas; SupportAgent → NexoAssistant, HandleMessage → Turn.
 - 2026-11-01 | front | FrontendUI: login, chat do funcionário (SSE + cards) e perfil sobre o contrato v1.
 - 2026-11-01 | docker | Dockerfile (Next standalone, Node 24) e docker-compose com volume para o SQLite.
+- 2026-11-01 | llm | Provedor do LLM configurável (`NEXO_LLM_PROVIDER`); padrão passa a ser OpenAI `gpt-5-mini`.

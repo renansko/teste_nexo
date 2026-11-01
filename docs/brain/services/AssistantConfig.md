@@ -4,7 +4,7 @@ Seam entre o engine genérico e uma persona. Tipos em `src/engine/types.ts`; reg
 
 ## O que uma persona fornece
 
-- `instructions` estáveis (marcadas para cache de prompt no provedor) e `contextFor` volátil por requisição.
+- `instructions` estáveis (entram no cache automático de prompt do provedor) e `contextFor` volátil por requisição.
 - `tools`: `ToolSpec` = tool Mastra + `label` humano + opcionais `summarize`, `toPayload`, `toModel`, `afterEffects`, `requiresConfirmation`.
 - `flows` ([FlowEngine](FlowEngine.md)), `actions` (executores de [PendingAction](PendingAction.md)), `limits` (`maxUserMessages`, `maxSteps`, `historyWindow`), `model`/`fastModel`.
 
@@ -13,7 +13,7 @@ Seam entre o engine genérico e uma persona. Tipos em `src/engine/types.ts`; reg
 - Chama as tools com `requestContext` `{ userId, conversationId, assistantId, now }`; a persona lê `userId` para escopo/privacidade.
 - Embrulha cada tool ([DecisionTrace](../entities/DecisionTrace.md)); acrescenta as tools internas `suggest-quick-replies`, `report-decision` e, se há rascunho, `confirm/cancel-pending-action`.
 - A chave da tool enviada ao modelo é o `id` da tool (não a chave do objeto).
-- `AgentRunner` (`src/engine/agent/types.ts`) isola o framework: testes injetam um runner roteirizado (`src/test/scriptedRunner.ts`); produção usa Mastra + `@ai-sdk/anthropic`.
+- `AgentRunner` (`src/engine/agent/types.ts`) isola o framework: testes injetam um runner roteirizado (`src/test/scriptedRunner.ts`); produção usa Mastra com o model router: `model` é a string `provedor/modelo` de `NEXO_MODEL` (`openai/gpt-6-luna`), o Mastra resolve o provedor e a chave; modelo inválido falha no turno como `AGENT_ERROR`.
 - Erros do modelo viram `AGENT_ERROR` (502) com mensagem genérica; detalhe só no log do servidor.
 
 ## Decisões

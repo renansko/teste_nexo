@@ -1,10 +1,10 @@
 /**
  * Runner baseado em Mastra. Cria o Agent por turno (barato) com as tools já embrulhadas,
- * instruções estáveis marcadas para cache de prompt e contexto volátil em `system`.
+ * instruções estáveis em `instructions` (cache de prompt automático no provedor) e contexto volátil em `system`.
+ * O modelo é a string `provedor/modelo` de `NEXO_MODEL`: o model router do Mastra resolve o provedor e a chave.
  * @wiki docs/brain/services/AssistantConfig.md
  */
 import { Agent } from "@mastra/core/agent";
-import { anthropic } from "@ai-sdk/anthropic";
 import { AppError } from "@/lib/errors";
 import type { AgentRunner } from "./types";
 
@@ -19,17 +19,14 @@ export function agentError(cause: unknown): AppError {
   return new AppError("AGENT_ERROR", AGENT_ERROR_MESSAGE, 502);
 }
 
+/** `opts.model` troca a resolução do modelo (testes injetam um modelo simulado); por padrão a string vai direto ao router. */
 export function createMastraRunner(opts: { model?: (id: string) => ModelConfig } = {}): AgentRunner {
-  const resolveModel = opts.model ?? ((id: string) => anthropic(id) as unknown as ModelConfig);
+  const resolveModel = opts.model ?? ((id: string) => id as ModelConfig);
   return async ({ config, tools, messages, system, requestContext, onTextDelta }) => {
     const agent = new Agent({
       id: config.id,
       name: config.name,
-      instructions: {
-        role: "system",
-        content: config.instructions,
-        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-      },
+      instructions: config.instructions,
       model: resolveModel(config.model),
       tools,
     });

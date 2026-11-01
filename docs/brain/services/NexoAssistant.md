@@ -21,6 +21,6 @@ Executores (`actions.ts`): `create-ticket` (crítico → transfer automático), 
 - Instruções estáveis em `instructions.ts` (cacheáveis); nada de data/usuário ali.
 - `report-decision` obrigatória como última tool; a confiança declarada é gatilho de segurança no engine.
 - Tipo e categoria **não** usam LLM extra: o agent pré-preenche quando tem certeza; o flow pergunta com opções quando não. `fastModel` fica reservado.
-- Modelo padrão `claude-sonnet-5-5` (`NEXO_MODEL`), `maxSteps: 6`, janela de 20 mensagens, limite de 30 mensagens do funcionário.
+- Modelo único `openai/gpt-6-luna` (`NEXO_MODEL`, formato `provedor/modelo`), `maxSteps: 6`, janela de 20 mensagens, limite de 30 mensagens do funcionário.
 
 Ver [FlowEngine](FlowEngine.md), [PendingAction](PendingAction.md), [ServiceDeskRules](../conventions/ServiceDeskRules.md).

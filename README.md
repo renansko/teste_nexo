@@ -6,13 +6,13 @@ Agent de service desk de TI em formato de chat: o funcionário descreve o proble
 
 ```bash
 npm install
-cp .env.example .env.local     # preencha ANTHROPIC_API_KEY e NEXO_AUTH_SECRET
+cp .env.example .env.local     # preencha OPENAI_API_KEY e NEXO_AUTH_SECRET
 npm run dev                    # http://localhost:3000
 ```
 
 - `npm test` roda os testes (node:test + tsx, sem rede); `npm run typecheck` checa os tipos; `npm run seed` recria os dados de exemplo.
 - Requer Node 22.5+ (usa `node:sqlite`). O banco fica em `./data/nexo.db` e é criado/semeado no primeiro acesso.
-- Com Docker: `cp .env.example .env` (preencha `ANTHROPIC_API_KEY` e `NEXO_AUTH_SECRET`) e `docker compose up --build`. O app sobe em http://localhost:3000 (`NEXO_PORT` muda a porta) e o banco fica no volume `nexo-data`. Atrás de um proxy TLS, envie `x-forwarded-proto: https` para o cookie de sessão sair `Secure`.
+- Com Docker: `cp .env.example .env` (preencha `OPENAI_API_KEY` e `NEXO_AUTH_SECRET`) e `docker compose up --build`. O app sobe em http://localhost:3000 (`NEXO_PORT` muda a porta) e o banco fica no volume `nexo-data`. Atrás de um proxy TLS, envie `x-forwarded-proto: https` para o cookie de sessão sair `Secure`.
 - Logins de exemplo (qualquer senha): `ana.souza@nexo.com`, `bruno.lima@nexo.com`, `carla.mendes@nexo.com`, `diego.rocha@nexo.com`, `elisa.martins@nexo.com`; analistas `fabio.nunes@nexo.com`, `gabriela.castro@nexo.com`.
 
 ## Arquitetura
@@ -27,7 +27,7 @@ docs/brain/        contratos, invariantes e decisões (comece por docs/brain/ind
 
 Regras de dependência: `engine` nunca importa `assistants/*`; a persona importa `engine` e `services`; `services` não sabe o que é agent. O agent só acessa dados por tools, e as tools recebem o usuário logado pelo `requestContext`, por isso a privacidade dos chamados é garantida no código, não no prompt.
 
-**Por que Mastra + Claude.** Mastra era a preferência do desafio e tem tools tipadas com zod, `requestContext` por requisição e stream com eventos de tool call. Claude Sonnet 5.5 (`@ai-sdk/anthropic`) tem boa aderência a instruções em português e a tool use; as instruções são estáveis e marcadas para cache de prompt. O modelo é configurável por `NEXO_MODEL`.
+**Por que Mastra + model router.** Mastra era a preferência do desafio e tem tools tipadas com zod, `requestContext` por requisição e stream com eventos de tool call. O modelo é a string `provedor/modelo` em `NEXO_MODEL` (padrão `openai/gpt-6-luna`): o model router do Mastra resolve o provedor e lê a chave `OPENAI_API_KEY`, sem SDK de provedor no projeto. As instruções são estáveis e entram no cache automático de prompt da OpenAI.
 
 ## Como o agent decide
 
