@@ -15,3 +15,4 @@
 - 2026-11-01 | outbox | Confirmação vira outbox: rascunho sai e ação entra em action_queue na mesma transação; worker retoma itens de processos que caíram (STALE_PROCESSING_MS).
 - 2026-11-01 | duplicidade | list-my-tickets purpose=check (sem cards); iniciar flow zera o payload da mensagem do agent; instrução: duplicidade sempre pelo flow.
 - 2026-11-01 | rascunho | Turno com rascunho mostra só o rascunho; existingTicketDraft como fonte única (corrige prazo NaN e afetados vazios no complemento).
+- 2026-11-01 | central | Busca na central sem payload; cite-articles mostra só artigos usados. Instrução: não narrar fontes ("a central de ajuda não trouxe").

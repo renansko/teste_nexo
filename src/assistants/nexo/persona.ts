@@ -4,7 +4,7 @@
  */
 import type { AssistantConfig } from "@/engine/types";
 import { NEXO_INSTRUCTIONS } from "./instructions";
-import { searchHelpCenter } from "./tools/helpCenter";
+import { citeArticles, searchHelpCenter } from "./tools/helpCenter";
 import { getMyTicket, listMyTickets } from "./tools/tickets";
 import { transferToAnalyst } from "./tools/transfer";
 import { addTicketUpdate, reopenTicket, startOpenTicketFlow } from "./tools/ticketActions";
@@ -17,7 +17,7 @@ export const nexoAssistant: AssistantConfig = {
   model: process.env.NEXO_MODEL ?? "claude-sonnet-5-5",
   fastModel: process.env.NEXO_FAST_MODEL ?? "claude-haiku-5-5",
   instructions: NEXO_INSTRUCTIONS,
-  tools: { searchHelpCenter, listMyTickets, getMyTicket, transferToAnalyst, startOpenTicketFlow, addTicketUpdate, reopenTicket },
+  tools: { searchHelpCenter, citeArticles, listMyTickets, getMyTicket, transferToAnalyst, startOpenTicketFlow, addTicketUpdate, reopenTicket },
   flows: { [openTicketFlow.id]: openTicketFlow },
   actions: nexoActions,
   limits: {

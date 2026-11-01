@@ -129,6 +129,28 @@ test("transferência pelo agent mostra o motivo em texto, não o código", async
   assert.match(r.messages[1]!.content, /Motivo: chamado vencido\./);
 });
 
+test("busca na central sem artigo aplicável: nenhum card; com artigo citado, só ele aparece", async () => {
+  const conv = newConv();
+  const semArtigo = scriptedRunner(async (_p, tool) => {
+    const hits = (await tool("search-help-center", { query: "mouse parou de funcionar" })) as { id: string }[];
+    assert.ok(hits.length > 0); // a busca trouxe algo (fraco), mas o agent não usou
+    return "Não encontrei um procedimento para isso. Você consegue continuar pelo touchpad?";
+  });
+  const r1 = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "Meu mouse parou de funcionar" }, runner: semArtigo });
+  assert.equal((r1.messages[0]!.payload ?? []).some((p) => p.kind === "articles"), false);
+  assert.equal(r1.messages[0]!.trace!.actions[0]!.label, "buscou na central de ajuda");
+
+  const comArtigo = scriptedRunner(async (_p, tool) => {
+    await tool("search-help-center", { query: "impressora não imprime" });
+    await tool("cite-articles", { ids: ["kb-impressora", "nao-existe"] });
+    return "Tente limpar a fila de impressão.";
+  });
+  const r2 = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "impressora não imprime" }, runner: comArtigo });
+  const arts = r2.messages[0]!.payload!.find((p) => p.kind === "articles")!.data as { id: string }[];
+  assert.deepEqual(arts.map((a) => a.id), ["kb-impressora"]);
+  assert.equal(r2.messages[0]!.trace!.actions.length, 1); // cite-articles não polui a linha de passos
+});
+
 test("limites: conversa encerrada e limite de mensagens", async () => {
   const conv = newConv();
   const runner = scriptedRunner(() => "ok");

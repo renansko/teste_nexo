@@ -11,6 +11,7 @@ beforeEach(() => {
   useTempDb({ seed: true });
   setDefaultRunner(scriptedRunner(async (_p, tool) => {
     await tool("search-help-center", { query: "vpn erro 809" });
+    await tool("cite-articles", { ids: ["kb-vpn-809"] });
     await tool("report-decision", { understanding: "VPN", action: "respondi com artigo", confidence: "alta", reasoning: "artigo kb-vpn-809" });
     return "Reinstale o cliente de VPN pelo portal e reinicie.";
   }));
