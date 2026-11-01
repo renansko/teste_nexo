@@ -14,3 +14,4 @@
 - 2026-11-01 | estrutura | Model router do Mastra (`NEXO_MODEL=openai/gpt-6-luna`, sem `NEXO_LLM_PROVIDER` nem `@ai-sdk/*`); retry nas rotas `/api/tickets`; `assertCanUpdate`/`assertCanReopen` no TicketService.
 - 2026-11-01 | hitl | HumanInTheLoop: open-ticket pergunta suspendendo a run do agent (Mastra suspend/resume, @mastra/libsql); migração 2 (suspended_run); FlowEngine vira fonte de passos para dois drivers.
 - 2026-11-01 | front | RichText: Markdown leve das respostas (negrito, itálico, código, listas) renderizado no chat.
+- 2026-11-01 | persona | Central de ajuda sempre oferece 'Abrir um chamado'; instrução para seguir ao chamado quando o artigo não resolve.

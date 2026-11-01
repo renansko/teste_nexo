@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import type { ToolSpec } from "@/engine/types";
 import { searchArticles } from "@/services/helpCenter/helpCenterService";
-import { articlesPart } from "../payload";
+import { articlesPart, OPEN_TICKET_OPTION, optionsPart } from "../payload";
 
 type Hit = { id: string; title: string; body: string; category: string };
 
@@ -15,5 +15,7 @@ export const searchHelpCenter: ToolSpec<{ query: string }, Hit[]> = {
     execute: async ({ query }) => searchArticles(query, 3).map(({ article }) => ({ id: article.id, title: article.title, body: article.body, category: article.category })),
   }),
   summarize: (_i, hits) => (hits.length ? `${hits.length} artigo(s): ${hits.map((h) => h.title).join("; ")}` : "nenhum artigo encontrado"),
-  toPayload: (_i, hits) => (hits.length ? [articlesPart(hits.slice(0, 2))] : undefined),
+  // Regra determinística: depois de consultar a central, o funcionário sempre pode seguir para o chamado dali mesmo
+  // (o artigo pode não resolver, ou dizer que o caso é uma requisição). O agent então chama open-ticket com o que já sabe.
+  toPayload: (_i, hits) => [...(hits.length ? [articlesPart(hits.slice(0, 2))] : []), optionsPart([OPEN_TICKET_OPTION])],
 };

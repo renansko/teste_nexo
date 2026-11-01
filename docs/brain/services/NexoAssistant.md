@@ -6,7 +6,7 @@ Persona "Nexo Assist". Código: `src/assistants/nexo/persona.ts`, `instructions.
 
 | Tool | Rótulo | Observações |
 |---|---|---|
-| `search-help-center` | buscou na central de ajuda | payload `articles` (2) |
+| `search-help-center` | buscou na central de ajuda | payload `articles` (2) + opção `abrir-um-chamado` sempre (regra: da central dá para seguir ao chamado) |
 | `list-my-tickets` | consultou seus chamados | payload `tickets` + opções (até 4 chamados; "Falar com um analista" se há vencido) |
 | `get-my-ticket` | consultou o chamado X | payload `ticket` com updates; opção de analista se vencido |
 | `open-ticket` | montou o chamado | HITL: pré-preenche título/descrição/tipo/categoria, pergunta o resto suspendendo a run e devolve `{ outcome }` com o rascunho; `forceNew` ignora duplicidade |

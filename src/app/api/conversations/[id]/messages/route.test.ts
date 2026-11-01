@@ -41,10 +41,13 @@ test("POST com Accept: text/event-stream devolve SSE com ações, texto, payload
     const [ev, data] = block.split("\n");
     return { type: ev!.replace("event: ", ""), data: JSON.parse(data!.replace("data: ", "")) };
   });
-  assert.deepEqual(events.map((e) => e.type), ["message.start", "action", "action", "text.delta", "payload", "trace", "message.end", "conversation"]);
+  // dois payloads: artigos e a opção "Abrir um chamado" que a central sempre oferece
+  assert.deepEqual(events.map((e) => e.type), ["message.start", "action", "action", "text.delta", "payload", "payload", "trace", "message.end", "conversation"]);
   assert.equal(events[1]!.data.action.label, "buscou na central de ajuda");
   assert.equal(events[3]!.data.delta, "Reinstale o cliente de VPN pelo portal e reinicie.");
-  assert.equal(events[6]!.data.message.role, "agent");
+  assert.equal(events[4]!.data.part.kind, "articles");
+  assert.deepEqual(events[5]!.data.part, { kind: "options", data: [{ id: "abrir-um-chamado", label: "Abrir um chamado" }] });
+  assert.equal(events[7]!.data.message.role, "agent");
 });
 
 test("erro de domínio no SSE vira evento error", async () => {
