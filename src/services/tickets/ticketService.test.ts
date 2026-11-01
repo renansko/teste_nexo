@@ -29,7 +29,28 @@ test("criar chamado: id sequencial, prazo pela prioridade; atualização renova 
   const u = tk.addTicketUpdate(t.id, { authorId: "emp-ana", authorRole: "employee", text: "Testei em outra porta USB" }, later);
   assert.equal(u.dueAt, "2026-03-02T19:00:00.000Z");
   assert.equal(tk.listUpdates(t.id).length, 1);
-  assert.equal(tk.createTicket({ ...t, type: "REQ" }, MONDAY_10H).id, "REQ-10500");
+  assert.equal(tk.createTicket({ ...t, type: "REQ" }, MONDAY_10H, { allowSimilar: true }).id, "REQ-10500");
+});
+
+test("sem duplicidade no banco: chamado aberto parecido do mesmo solicitante é recusado; de outro, não", () => {
+  const input = { type: "INC" as const, title: "Mouse sem fio não pareia", description: "troquei a pilha", category: "Hardware" as const, priority: "media" as const, requesterId: "emp-ana", affected: "Só eu" };
+  const first = tk.createTicket(input, MONDAY_10H);
+  assert.throws(() => tk.createTicket({ ...input, title: "Mouse sem fio não pareia mais" }, MONDAY_10H), { code: "DUPLICATE_TICKET", details: { ticketId: first.id } });
+  assert.ok(tk.createTicket({ ...input, requesterId: "emp-bruno" }, MONDAY_10H)); // privacidade: outro solicitante não conta
+  assert.ok(tk.createTicket(input, MONDAY_10H, { allowSimilar: true })); // "criar um novo mesmo assim"
+});
+
+test("idempotência: mesma chave não grava duas vezes (criar, complementar, reabrir)", () => {
+  const input = { type: "REQ" as const, title: "Licença do Figma", description: "projeto novo", category: "Software" as const, priority: "baixa" as const, requesterId: "emp-ana", affected: "Só eu" };
+  const a = tk.createTicket(input, MONDAY_10H, { idempotencyKey: "k-create" });
+  const b = tk.createTicket(input, MONDAY_10H, { idempotencyKey: "k-create" });
+  assert.equal(b.id, a.id);
+  tk.addTicketUpdate(a.id, { authorId: "emp-ana", authorRole: "employee", text: "urgente" }, MONDAY_10H, { idempotencyKey: "k-up" });
+  tk.addTicketUpdate(a.id, { authorId: "emp-ana", authorRole: "employee", text: "urgente" }, MONDAY_10H, { idempotencyKey: "k-up" });
+  assert.equal(tk.listUpdates(a.id).length, 1);
+  tk.reopenTicket("INC-20150", { authorId: "emp-ana", text: "voltou" }, MONDAY_10H, { idempotencyKey: "k-reopen" });
+  assert.equal(tk.reopenTicket("INC-20150", { authorId: "emp-ana", text: "voltou" }, MONDAY_10H, { idempotencyKey: "k-reopen" }).status, "aberto");
+  assert.equal(tk.listUpdates("INC-20150").filter((u) => u.text === "Reaberto: voltou").length, 1);
 });
 
 test("reabertura só até 7 dias após resolvido", () => {

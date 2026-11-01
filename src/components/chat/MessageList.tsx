@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useRef } from "react";
-import { Check, LoaderCircle, MessageCircleQuestion, X } from "lucide-react";
-import type { ChatMessage, Option, TicketView, TraceAction } from "@/lib/api";
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronDown, LoaderCircle, MessageCircleQuestion, X } from "lucide-react";
+import type { ChatMessage, Option, TicketView, Trace, TraceAction } from "@/lib/api";
+import { DecisionDetails, hasDetails } from "@/components/trace/DecisionDetails";
+import traceStyles from "@/components/trace/Trace.module.css";
 import { looseOptions, OptionChips, PayloadCards } from "./payload/Payload";
 import { RichText } from "./RichText";
 import styles from "./Chat.module.css";
@@ -56,7 +58,7 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
           const handlers = { interactive: live, onOption, onPickTicket };
           const chips = looseOptions(parts);
           return (
-            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions}>
+            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions} trace={m.trace}>
               {(m.content || chips) && (
                 <div className={styles.agentBubble}>
                   {m.content && <RichText className={styles.text} text={m.content} />}
@@ -91,8 +93,19 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
 /**
  * `live`: turno em andamento (SSE), onde `pending` significa "executando" (spinner). Numa mensagem gravada,
  * `pending` é uma tool que parou para perguntar ao funcionário: ícone estático de pergunta.
+ * `trace`: decisão gravada; quando tem detalhes, mostra o "Por quê?".
  */
-function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAction[]; live?: boolean; children: React.ReactNode }) {
+function AgentMessage(props: {
+  who: string;
+  analyst?: boolean;
+  actions?: TraceAction[];
+  trace?: Trace | null;
+  live?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const details = hasDetails(props.trace) ? props.trace : null;
   return (
     <div className={styles.agentRow}>
       <div className={styles.statusLine}>
@@ -115,7 +128,20 @@ function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAc
             {a.label}
           </span>
         ))}
+        {details && (
+          <button
+            type="button"
+            className={traceStyles.toggle}
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Ocultar detalhes" : "Por quê?"}
+            <ChevronDown size={13} aria-hidden />
+          </button>
+        )}
       </div>
+      {details && open && <DecisionDetails trace={details} id={panelId} />}
       {props.children}
     </div>
   );

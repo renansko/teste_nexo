@@ -7,10 +7,11 @@ import assert from "node:assert/strict";
 import { useTempDb } from "@/test/helpers";
 import { scriptedRunner } from "@/test/scriptedRunner";
 import { getEmployee } from "@/services/employees/employeeService";
-import { createConversation, getConversation } from "@/services/conversations/conversationService";
-import { getTicket, listUpdates } from "@/services/tickets/ticketService";
+import { createConversation, getConversation, listMessages } from "@/services/conversations/conversationService";
+import { getTicket, listTickets, listUpdates } from "@/services/tickets/ticketService";
 import { legacyGateway } from "@/services/tickets/legacyGateway";
-import { closeDb } from "@/lib/db";
+import { closeDb, getDb } from "@/lib/db";
+import { getQueuedAction, listQueuedActions, processActionQueue } from "@/engine/actions/queue";
 import { runTurn } from "@/engine/conversation/turn";
 import { takeConversation } from "@/engine/conversation/state";
 import type { ChatEvent } from "@/engine/conversation/events";
@@ -162,17 +163,32 @@ test("editar prioridade reabre o passo pelo flow determinístico; caso crítico 
   assert.match(c.conversation.transferSummary ?? "", /INC-20400/);
 });
 
-test("sistema legado indisponível ao confirmar: rascunho continua salvo para nova tentativa", async () => {
+test("sistema legado fora ao confirmar: pedido vai para a fila, é registrado quando volta e reprocessar não duplica", async () => {
   const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
   await start(conv.id, { title: "Mouse sem fio não pareia", description: "Troquei a pilha e nada.", type: "INC", category: "Hardware" });
   await send(conv.id, { optionId: "eu" });
   await send(conv.id, { optionId: "atrapalha" });
   legacyGateway.configure({ rate: 1, durationMs: 60_000, now: () => 0 });
   const r = await send(conv.id, { optionId: "confirm" });
-  assert.match(r.messages[0]!.content, /instável/);
-  assert.ok(getConversation(conv.id)!.pendingAction);
-  assert.ok(optionIds(r.messages[0]!).includes("confirm"));
+  assert.match(r.messages[0]!.content, /ficou na fila/);
+  assert.equal(getConversation(conv.id)!.pendingAction, null); // já confirmado: não pede de novo
+  const [queued] = listQueuedActions({ conversationId: conv.id });
+  assert.equal(queued?.status, "queued");
+  assert.equal(queued?.kind, "create-ticket");
+
+  const later = (min: number) => () => new Date(Date.now() + min * 60_000);
+  assert.deepEqual(await processActionQueue({ now: later(1) }), { done: 0, retried: 1, failed: 0 }); // ainda fora
   legacyGateway.configure({ rate: 0 });
-  const ok = await send(conv.id, { optionId: "confirm" });
-  assert.match(ok.messages[0]!.content, /criado/);
+  assert.deepEqual(await processActionQueue({ now: later(10) }), { done: 1, retried: 0, failed: 0 });
+
+  const last = listMessages(conv.id).at(-1)!;
+  assert.match(last.content, /O sistema de chamados voltou\. Chamado INC-20400 criado/);
+  assert.ok(last.trace!.notes!.some((n) => n.startsWith("executado pela fila")));
+  assert.equal(getConversation(conv.id)!.ticketId, "INC-20400");
+  assert.equal(getQueuedAction(queued!.id)?.status, "done");
+
+  // Reprocessar (ex.: worker caiu depois de gravar e o item voltou para a fila) não cria de novo: mesma chave.
+  getDb().prepare(`UPDATE action_queue SET status = 'queued', next_attempt_at = '1970-01-01T00:00:00.000Z' WHERE id = ?`).run(queued!.id);
+  await processActionQueue({ now: later(20) });
+  assert.equal(listTickets({ requesterId: "emp-ana" }).filter((t) => t.title === "Mouse sem fio não pareia").length, 1);
 });

@@ -4,7 +4,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { AppError } from "@/lib/errors";
-import { env, EnvError } from "@/lib/env";
+import { env } from "@/lib/env";
 import { getEmployee, type Employee, type EmployeeRole } from "@/services/employees/employeeService";
 
 export const SESSION_COOKIE = "nexo_session";
@@ -18,8 +18,11 @@ export interface Session { user: Employee; claims: SessionClaims }
 function secret(): string {
   const { NEXO_AUTH_SECRET: s, NODE_ENV } = env();
   if (s) return s;
-  // Defesa em profundidade: o boot já barra isso (assertRuntimeEnv), mas um entrypoint que não passe por ele não pode assinar com o segredo público.
-  if (NODE_ENV === "production") throw new EnvError(["NEXO_AUTH_SECRET: obrigatório em produção"]);
+  // Em produção o segredo de desenvolvimento é público (está no código): aceitar permitiria forjar sessões de analista.
+  // O boot já barra isso (assertRuntimeEnv); aqui é defesa em profundidade para entrypoints que não passem por ele.
+  if (NODE_ENV === "production") {
+    throw new AppError("AUTH_NOT_CONFIGURED", "Autenticação indisponível: servidor sem NEXO_AUTH_SECRET configurado", 500);
+  }
   if (!warned && NODE_ENV !== "test") {
     warned = true;
     console.warn("[auth] NEXO_AUTH_SECRET não definido; usando segredo de desenvolvimento.");

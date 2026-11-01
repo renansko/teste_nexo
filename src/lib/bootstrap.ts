@@ -4,6 +4,7 @@
  */
 import { getDb } from "./db";
 import { seedNexo } from "@/assistants/nexo/seed";
+import { startActionQueueWorker } from "@/engine/actions/queue";
 
 let booted = false;
 
@@ -11,6 +12,8 @@ export function boot(): void {
   if (booted) return;
   getDb();
   seedNexo();
+  // Worker da fila de ações (pedidos confirmados durante indisponibilidade). Nos testes a fila é processada à mão.
+  if (process.env.NODE_ENV !== "test") startActionQueueWorker();
   booted = true;
 }
 

@@ -100,8 +100,10 @@ function dueTime(iso: string): string {
 }
 
 function DraftCard({ draft, options, interactive, onOption }: { draft: DraftTicket; options: Option[] } & PayloadHandlers) {
-  const sameDay = new Date(draft.dueAt).toDateString() === new Date().toDateString();
-  const due = sameDay ? `resposta até ${dueTime(draft.dueAt)}` : `resposta até ${formatDateTime(draft.dueAt)}`;
+  // Rascunhos antigos (já gravados no histórico) podem não trazer prazo: sem prazo válido, não mostra a linha.
+  const validDue = !!draft.dueAt && !Number.isNaN(new Date(draft.dueAt).getTime());
+  const sameDay = validDue && new Date(draft.dueAt).toDateString() === new Date().toDateString();
+  const due = !validDue ? null : sameDay ? `resposta até ${dueTime(draft.dueAt)}` : `resposta até ${formatDateTime(draft.dueAt)}`;
   return (
     <article className={styles.card} aria-label="Rascunho do chamado">
       <div className={styles.body}>
@@ -120,14 +122,14 @@ function DraftCard({ draft, options, interactive, onOption }: { draft: DraftTick
         <Field label="Prioridade">
           <Dot color={PRIORITY_DOT[draft.priority]} />
           {draft.priorityLabel}
-          <span className={styles.muted}>· {due}</span>
+          {due && <span className={styles.muted}>· {due}</span>}
         </Field>
-        <Field label="Afetados">{draft.affected}</Field>
+        <Field label="Afetados">{draft.affected || "—"}</Field>
       </div>
       {draft.priorityReason && <p className={styles.related}>{draft.priorityReason}</p>}
-      {draft.related.length > 0 && (
+      {(draft.related ?? []).filter((t) => t.id !== draft.ticket?.id).length > 0 && (
         <p className={styles.related}>
-          Relacionado: {draft.related.map((t) => `${t.id} · ${t.title}`).join(", ")}
+          Relacionado: {draft.related.filter((t) => t.id !== draft.ticket?.id).map((t) => `${t.id} · ${t.title}`).join(", ")}
         </p>
       )}
       {options.length > 0 && (

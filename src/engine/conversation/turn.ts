@@ -17,11 +17,14 @@ import { agentError, createMastraRunner, RESUME_GONE } from "../agent/mastraRunn
 import { discardSuspendedRun } from "../agent/mastra";
 import { newCollector, wrapTools, type TurnCollector } from "../tools/wrap";
 import { advanceFlow, CANCEL_OPTION, isCancelInput, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
-import { interpretPendingInput, pendingParts } from "../actions/pending";
+import { interpretPendingInput, pendingParts, withActionId } from "../actions/pending";
+import { isTemporarilyUnavailable, markActionDone, markActionFailed, recordConfirmedAction, rescheduleAction } from "../actions/queue";
+import { transaction } from "@/lib/db";
+import { ANALYST_OPTION, applyAfterEffects } from "./effects";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
 import {
-  PAYLOAD_OPTIONS, type AfterEffect, type AssistantConfig, type FlowState, type Payload, type PayloadPart,
+  PAYLOAD_OPTIONS, type AfterEffect, type AssistantConfig, type Confidence, type FlowState, type Payload, type PayloadPart,
   type PendingAction, type QuickOption, type SuspendedRun, type SuspendPrompt, type Trace, type TurnContext, type TurnInput,
 } from "../types";
 
@@ -38,7 +41,16 @@ export interface TurnParams {
 
 export interface TurnResult { conversation: Conversation; messages: Message[] }
 
-export const ANALYST_OPTION: QuickOption = { id: "falar-com-um-analista", label: "Falar com um analista" };
+export { ANALYST_OPTION };
+
+/** Código de `transferReason` quando o engine transfere por falta de segurança do agent. */
+export const LOW_CONFIDENCE_REASON = "low_confidence";
+
+/** Confiança declarada na resposta anterior do assistente (antes do turno atual). */
+function lastAgentConfidence(conversationId: string): Confidence | undefined {
+  const last = listMessages(conversationId).reverse().find((m) => m.role === "agent");
+  return last?.trace?.decision?.confidence;
+}
 
 let defaultRunner: AgentRunner | undefined;
 
@@ -163,13 +175,6 @@ class TurnHelpers {
     return m;
   }
 
-  system(text: string): Message {
-    const m = addMessage(this.conversationId, { role: "system", content: text });
-    this.produced.push(m);
-    this.emit({ type: "message.end", message: m });
-    return m;
-  }
-
   async applyFlowResult(r: FlowStepResult, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
     const started = Date.now();
     if (r.kind === "ask") {
@@ -187,7 +192,7 @@ class TurnHelpers {
     const payload: Payload = [...(r.outcome.payload ?? [])];
     let pending: PendingAction | null = null;
     if (r.outcome.pendingAction) {
-      pending = r.outcome.pendingAction;
+      pending = withActionId(r.outcome.pendingAction);
       payload.push(...pendingParts(pending));
     }
     updateConversation(this.conversationId, { activeFlow: null, pendingAction: pending }, this.now);
@@ -195,23 +200,60 @@ class TurnHelpers {
     void ctx;
   }
 
-  async executePending(pending: PendingAction, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
+  /**
+   * Executa uma ação confirmada pelo padrão outbox: tirar o rascunho da conversa e registrar a ação em `action_queue`
+   * acontecem na MESMA transação; só depois o executor roda. Se o processo cair no meio, o worker retoma o item;
+   * se o sistema estiver fora (503), o item fica na fila. A chave de idempotência evita gravação dupla em qualquer caso.
+   */
+  async executePending(draft: PendingAction, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
     const started = Date.now();
+    const pending = withActionId(draft); // rascunhos antigos (sem id) ganham um agora
     const executor = this.config.actions[pending.kind];
     if (!executor) throw new AppError("ACTION_UNKNOWN", `Ação '${pending.kind}' não registrada`, 500);
-    updateConversation(this.conversationId, { pendingAction: null }, this.now);
+    const claimed = transaction(() => {
+      updateConversation(this.conversationId, { pendingAction: null }, this.now);
+      return recordConfirmedAction({ conversationId: this.conversationId, userId: ctx.userId, pending, now: this.now });
+    });
+    if (!claimed) {
+      // Confirmação repetida em paralelo: a outra requisição já registrou e executa esta ação.
+      this.reply("Esse pedido já foi confirmado e está sendo processado.", [], { source: "rule", notes: [`${pending.kind}: confirmação repetida (${pending.id})`] }, started);
+      return;
+    }
     try {
-      const result = await executor(pending.input, ctx);
-      this.reply(result.text, result.payload ?? [], { source: "action", ...result.trace }, started);
+      const result = await executor(pending.input, { ...ctx, idempotencyKey: pending.id });
+      markActionDone(pending.id, new Date());
+      let payload: Payload = result.payload ?? [];
+      if (result.pendingAction) {
+        // O executor trocou a ação (ex.: surgiu um chamado parecido): novo rascunho, nova confirmação.
+        const next = withActionId({ ...result.pendingAction, createdAt: this.now.toISOString() });
+        updateConversation(this.conversationId, { pendingAction: next }, this.now);
+        payload = [...payload.filter((x) => x.kind !== PAYLOAD_OPTIONS), ...pendingParts(next)];
+      }
+      this.reply(result.text, payload, { source: "action", ...result.trace }, started);
       this.applyAfterEffects(result.afterEffects ?? []);
     } catch (e) {
       const code = e instanceof AppError ? e.code : "ERROR";
-      // Falha ao executar (ex.: legado indisponível): mantém o rascunho para tentar de novo.
-      updateConversation(this.conversationId, { pendingAction: pending }, this.now);
-      const text = code === "TICKET_SERVICE_UNAVAILABLE"
-        ? "O sistema de chamados está instável neste momento e não consegui concluir. O rascunho continua salvo: tente confirmar novamente em alguns segundos."
-        : `Não consegui concluir: ${e instanceof Error ? e.message : String(e)}. O rascunho continua salvo.`;
-      this.reply(text, pendingParts(pending), {
+      if (isTemporarilyUnavailable(e)) {
+        // Já confirmado: continua no outbox e é registrado quando o sistema voltar (mesma chave → sem duplicar).
+        rescheduleAction(pending.id, new Date(), code);
+        this.reply(
+          "O sistema de chamados está fora do ar agora. Seu pedido já está confirmado e ficou na fila: vou registrá-lo assim que o sistema voltar e aviso você aqui nesta conversa.",
+          [],
+          {
+            source: "action",
+            actions: [{ id: "queue", tool: pending.kind, label: `${pending.label}: na fila`, status: "done", summary: "aguardando o sistema de chamados voltar" }],
+            notes: [`${pending.kind}: ${code}; na fila (${pending.id})`],
+          },
+          started,
+        );
+        return;
+      }
+      // Falha de regra (ex.: chamado não está mais aberto): nada foi gravado; devolve o rascunho com nova chave.
+      markActionFailed(pending.id, new Date(), code);
+      const retry = withActionId({ ...pending, id: undefined });
+      updateConversation(this.conversationId, { pendingAction: retry }, this.now);
+      const text = `Não consegui concluir: ${e instanceof Error ? e.message : String(e)}. O rascunho continua salvo.`;
+      this.reply(text, pendingParts(retry), {
         source: "action",
         actions: [{ id: "exec", tool: pending.kind, label: pending.label, status: "error", summary: code }],
         notes: [`${pending.kind}: ${code}`],
@@ -220,15 +262,9 @@ class TurnHelpers {
   }
 
   applyAfterEffects(effects: AfterEffect[]): void {
-    for (const e of effects) {
-      if (e.type === "transfer") {
-        const conv = getConversation(this.conversationId)!;
-        if (conv.state !== "agent") continue;
-        updateConversation(this.conversationId, { state: "waiting_analyst", transferReason: e.reason, transferSummary: e.summary }, this.now);
-        this.system(`Conversa transferida para um analista. Motivo: ${e.reason}. Resumo: ${e.summary}`);
-      } else if (e.type === "link-ticket") {
-        updateConversation(this.conversationId, { ticketId: e.ticketId }, this.now);
-      }
+    for (const m of applyAfterEffects(this.conversationId, effects, this.now)) {
+      this.produced.push(m);
+      this.emit({ type: "message.end", message: m });
     }
   }
 
@@ -289,20 +325,39 @@ class TurnHelpers {
       return;
     }
 
-    let payload: Payload = mergeOptions(collector.payload, collector.options);
+    // Quando o agent inicia um flow, a mensagem dele é só a introdução: cards e opções das consultas que ele fez
+    // para decidir (ex.: lista de chamados ao checar duplicidade) não vão ao funcionário. O flow traz o que importa.
+    let payload: Payload = collector.startFlow ? [] : mergeOptions(collector.payload, collector.options);
     let pending: PendingAction | null | undefined = undefined;
 
     if (collector.pending) {
-      pending = { ...collector.pending, createdAt: this.now.toISOString() };
-      payload = [...payload.filter((x) => x.kind !== PAYLOAD_OPTIONS), ...pendingParts(pending)];
+      pending = withActionId({ ...collector.pending, createdAt: this.now.toISOString() });
+      // Com rascunho, a tela mostra só o rascunho: cards de consultas feitas para decidir (ex.: lista de chamados)
+      // competiriam com ele e pareceriam opções. O rascunho já identifica o chamado alvo. Fica só o que o próprio
+      // resultado do chat-formulário trouxe (ex.: o chamado relacionado que ele propõe complementar).
+      payload = [...(collector.outcomePayload ?? []), ...pendingParts(pending)];
     } else if (collector.cancelPending) {
       pending = null;
     }
 
     const transferred = collector.afterEffects.some((e) => e.type === "transfer");
-    if (collector.decision?.confidence === "baixa" && !transferred && !pending && !collector.startFlow) {
-      payload = mergeOptions(payload, [ANALYST_OPTION]);
-      collector.notes.push("confiança baixa: oferecida transferência");
+    const decision = collector.decision;
+    if (decision?.confidence === "baixa" && !transferred && !pending && !collector.startFlow) {
+      if (lastAgentConfidence(conv.id) === "baixa") {
+        // Segunda resposta seguida sem segurança: o engine chama o analista (Anexo A), sem depender do clique.
+        collector.afterEffects.push({
+          type: "transfer",
+          reason: LOW_CONFIDENCE_REASON,
+          label: "o assistente não teve segurança para decidir",
+          summary: `O assistente ficou sem segurança em duas respostas seguidas. Entendeu: ${decision.understanding}. Por quê: ${decision.reasoning}`,
+        });
+        collector.notes.push("confiança baixa em duas respostas seguidas: transferido para um analista");
+        text = `${text ? `${text}\n\n` : ""}Como não tenho segurança para resolver isso sozinho, chamei um analista para continuar com você.`;
+        payload = payload.filter((x) => x.kind !== PAYLOAD_OPTIONS);
+      } else {
+        payload = mergeOptions(payload, [ANALYST_OPTION]);
+        collector.notes.push("confiança baixa: oferecida transferência");
+      }
     }
     if (!text) text = collector.startFlow ? "" : "Certo.";
 

@@ -14,6 +14,25 @@ test("assina, verifica e expira", () => {
   assert.equal(verifySession("lixo", now), null);
 });
 
+test("em produção, sem NEXO_AUTH_SECRET, recusa assinar e verificar (segredo de dev não vale)", () => {
+  const env = process.env as Record<string, string | undefined>;
+  const saved = { node: env.NODE_ENV, secret: env.NEXO_AUTH_SECRET };
+  const forged = signSession({ sub: "an-fabio", role: "analyst" }); // assinado com o segredo de dev
+  try {
+    env.NODE_ENV = "production";
+    delete env.NEXO_AUTH_SECRET;
+    assert.throws(() => signSession({ sub: "emp-ana", role: "employee" }), { code: "AUTH_NOT_CONFIGURED" });
+    assert.throws(() => verifySession(forged), { code: "AUTH_NOT_CONFIGURED" });
+    env.NEXO_AUTH_SECRET = "segredo-de-producao";
+    assert.equal(verifySession(forged), null);
+  } finally {
+    if (saved.node === undefined) delete env.NODE_ENV;
+    else env.NODE_ENV = saved.node;
+    if (saved.secret === undefined) delete env.NEXO_AUTH_SECRET;
+    else env.NEXO_AUTH_SECRET = saved.secret;
+  }
+});
+
 test("resolve sessão por Bearer e por cookie; exige role", () => {
   const token = signSession({ sub: "emp-ana", role: "employee" });
   const bearer = new Request("http://x/api", { headers: { authorization: `Bearer ${token}` } });
@@ -24,15 +43,4 @@ test("resolve sessão por Bearer e por cookie; exige role", () => {
   assert.throws(() => requireSession(bearer, { role: "analyst" }), { code: "FORBIDDEN" });
   const analyst = signSession({ sub: "an-fabio", role: "analyst" });
   assert.equal(requireSession(new Request("http://x/api", { headers: { authorization: `Bearer ${analyst}` } }), { role: "analyst" }).user.role, "analyst");
-});
-
-test("produção sem NEXO_AUTH_SECRET não assina com o segredo de desenvolvimento", () => {
-  const prev = { NODE_ENV: process.env.NODE_ENV, NEXO_AUTH_SECRET: process.env.NEXO_AUTH_SECRET };
-  Object.assign(process.env, { NODE_ENV: "production" });
-  delete process.env.NEXO_AUTH_SECRET;
-  try {
-    assert.throws(() => signSession({ sub: "emp-ana", role: "employee" }), /NEXO_AUTH_SECRET/);
-  } finally {
-    for (const [k, v] of Object.entries(prev)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
-  }
 });

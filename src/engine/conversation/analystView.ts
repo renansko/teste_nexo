@@ -17,12 +17,14 @@ const pick = (e: Employee | undefined) => (e ? { id: e.id, name: e.name, email: 
 
 export function toAnalystItem(c: Conversation): AnalystConversationItem {
   const analyst = c.analystId ? getEmployee(c.analystId) : undefined;
-  const transfer = c.state === "waiting_analyst" ? listMessages(c.id).find((m) => m.role === "system" && m.content.startsWith("Conversa transferida")) : undefined;
+  const messages = listMessages(c.id);
+  const transfer = c.state === "waiting_analyst" ? messages.find((m) => m.role === "system" && m.content.startsWith("Conversa transferida")) : undefined;
   return {
     ...publicConversation(c),
     employee: pick(getEmployee(c.employeeId)),
     analyst: analyst ? { id: analyst.id, name: analyst.name } : null,
-    lastMessage: lastMessage(c.id) ?? null,
+    // Prévia da lista: a última fala (funcionário, agent ou analista); avisos de sistema só se não houver fala.
+    lastMessage: [...messages].reverse().find((m) => m.role !== "system") ?? lastMessage(c.id) ?? null,
     waitingSince: c.state === "waiting_analyst" ? (transfer?.createdAt ?? c.updatedAt) : null,
   };
 }

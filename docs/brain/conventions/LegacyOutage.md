@@ -6,6 +6,6 @@ O PRD diz que o sistema de chamados é legado e "de vez em quando fica indispon�
 - `withRetry(fn)`: repete só esse erro, 2 vezes (700 ms, 1400 ms), e informa `attempts`; quem chama registra "sistema de chamados instável: N tentativas" no trace.
 - Tools: falha após retries vira `{ error: "TICKET_SERVICE_UNAVAILABLE" }` para o modelo, que avisa o funcionário e pede para tentar de novo (instrução).
 - Rotas HTTP de chamados (`/api/tickets`, `/api/tickets/:id`) também usam `withRetry`; só depois dos retries devolvem 503.
-- Executores: falha mantém o rascunho ([PendingAction](../services/PendingAction.md)).
-- Dedup no flow: falha vira nota e o rascunho segue sem verificação.
+- Executores: a ação confirmada já está no outbox; falha após retries só a reagenda ([ActionQueue](../services/ActionQueue.md)). O funcionário não precisa confirmar de novo.
+- Dedup no flow: falha vira nota e aviso no rascunho; a checagem é refeita pelo serviço ao gravar ([TicketService](../services/TicketService.md)).
 - Testes: `useTempDb` zera a taxa; `legacyGateway.configure({ rate, durationMs, now, random })` injeta relógio e sorteio.

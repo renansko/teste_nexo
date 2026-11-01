@@ -8,10 +8,10 @@
 2. Grava a mensagem do usuário (texto, ou rótulo da opção clicada resolvido no último payload `options`).
 3. Estado ≠ `agent` → termina (fila do analista).
 4. Run suspensa ([HumanInTheLoop](../services/HumanInTheLoop.md)): `cancel`/texto de cancelar descarta e responde (`source: rule`); senão retoma o agent com `{ text, optionId }` e segue ao passo 7.
-5. Ação pendente: `confirm` executa; `cancel` descarta; `edit:<key>` reabre o flow; texto livre segue ao agent com o rascunho no contexto.
+5. Ação pendente: `confirm` executa pelo outbox ([ActionQueue](../services/ActionQueue.md)); `cancel` descarta; `edit:<key>` reabre o flow; texto livre segue ao agent com o rascunho no contexto.
 6. Flow ativo → `advanceFlow`; termina.
 7. Agent: tools embrulhadas + `requestContext`; histórico = últimas N mensagens (ignorado na retomada: vem do snapshot); `system` volátil (usuário, data, mensagens restantes, rascunho, resumo de transferência).
-8. Pós-agent: se a run suspendeu → grava `suspendedRun`, limpa rascunho/flow e responde a pergunta com opções (+ `cancel`). Senão: payload (cards + opções mescladas, máx. 6); rascunho novo substitui opções; confiança baixa → opção de analista; grava mensagem com trace; `confirm-pending-action` → executa; `startFlow` → primeira pergunta (segunda mensagem); `afterEffects` (transfer cria mensagem de sistema e muda estado).
+8. Pós-agent: se a run suspendeu → grava `suspendedRun`, limpa rascunho/flow e responde a pergunta com opções (+ `cancel`); nada das consultas do turno vai à tela. Senão: payload (cards + opções mescladas, máx. 6; vazio se o agent iniciou um flow, porque as consultas feitas para decidir não vão à tela); rascunho novo → a mensagem mostra só o rascunho mais o payload do próprio resultado (ex.: chamado relacionado), cards de consulta descartados; confiança baixa → opção de analista, ou transferência automática (`low_confidence`) se a resposta anterior do assistente também foi baixa; grava mensagem com trace; `confirm-pending-action` → executa; `startFlow` → primeira pergunta (segunda mensagem); `afterEffects` (transfer cria mensagem de sistema e muda estado).
 
 ## Invariantes
 

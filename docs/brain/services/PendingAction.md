@@ -4,7 +4,7 @@ Nenhum efeito colateral sem confirmação explícita: tools de escrita e flows p
 
 ## Estrutura
 
-`PendingAction { kind, input, draft, label, extraOptions?, createdAt }` persistida em `conversations.pending_action`. `kind` indexa `AssistantConfig.actions`; `input` é o que o executor precisa (pode trazer `flow` snapshot para edição); `draft` é só para exibição (payload `draft`).
+`PendingAction { id, kind, input, draft, label, extraOptions?, createdAt }` persistida em `conversations.pending_action`. `id` é atribuído pelo engine (`withActionId`) e vira a `idempotencyKey` do executor. `kind` indexa `AssistantConfig.actions`; `input` é o que o executor precisa (pode trazer `flow` snapshot para edição); `draft` é só para exibição (payload `draft`).
 
 ## Opções enviadas com o rascunho
 
@@ -12,8 +12,9 @@ Nenhum efeito colateral sem confirmação explícita: tools de escrita e flows p
 
 ## Invariantes
 
-- Tools com `requiresConfirmation` devolvem a `PendingAction` e o modelo recebe `{ status: "awaiting_confirmation", draft }`; nada é gravado. Tools que concluem um chat-formulário ([HumanInTheLoop](HumanInTheLoop.md)) devolvem `{ outcome }` e caem no mesmo contrato (com `summary` = texto do resultado).
-- O executor roda sem LLM (`source: action` no trace) e devolve texto, payload e `afterEffects` (`link-ticket`, `transfer`).
-- Falha do executor (ex.: `TICKET_SERVICE_UNAVAILABLE` após retries) **mantém** o rascunho e responde com as mesmas opções para nova tentativa.
+- Tools com `requiresConfirmation` devolvem a `PendingAction` e o modelo recebe `{ status: "awaiting_confirmation", draft }`; nada é gravado. Tools que concluem um chat-formulário ([HumanInTheLoop](HumanInTheLoop.md)) devolvem `{ outcome }` e caem no mesmo contrato (com `summary` = texto do resultado); o payload do resultado (ex.: chamado relacionado) acompanha o rascunho na tela.
+- Rascunho de complemento/reabertura sempre por `existingTicketDraft` (dados do chamado existente + prazo renovado); flow, tools e executor usam a mesma fonte.
+- O executor roda sem LLM (`source: action` no trace) e devolve texto, payload, `afterEffects` (`link-ticket`, `transfer`) e, opcionalmente, um novo `pendingAction` (ex.: criação recusada por duplicado → rascunho de complemento, nova confirmação).
+- Confirmar segue o padrão outbox ([ActionQueue](ActionQueue.md)): tirar o rascunho e registrar a ação são atômicos; a execução vem depois. Falha temporária (503) → fica na fila; erro de regra → o rascunho volta com nova chave e as mesmas opções.
 - Um novo rascunho substitui o anterior; `take`/`close` do analista descartam.
 - `edit:<key>` exige `input.flow`; sem ele, a opção cai no agent.

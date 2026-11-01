@@ -13,12 +13,18 @@ const modelTicket = (t: TicketView) => ({
   dueAt: t.dueAt, overdue: t.overdue, updatedAt: t.updatedAt, affected: t.affected,
 });
 
-export const listMyTickets: ToolSpec<{ status?: "open" | "resolved" | "all" }, TicketView[]> = {
-  label: "consultou seus chamados",
+type ListInput = { status?: "open" | "resolved" | "all"; purpose?: "show" | "check" };
+
+export const listMyTickets: ToolSpec<ListInput, TicketView[]> = {
+  label: (i) => (i.purpose === "check" ? "verificou se já existe chamado parecido" : "consultou seus chamados"),
   tool: createTool({
     id: "list-my-tickets",
-    description: "Lista os chamados do funcionário logado (abertos por padrão). Use quando ele quiser saber como está um chamado, mesmo sem lembrar o número, ou antes de abrir um novo para evitar duplicidade.",
-    inputSchema: z.object({ status: z.enum(["open", "resolved", "all"]).optional().describe("open (padrão), resolved ou all") }),
+    description:
+      "Lista os chamados do funcionário logado (abertos por padrão). purpose=show: ele quer ver/escolher um chamado (status, sem lembrar o número); a lista aparece para ele. purpose=check: só para você conferir antes de abrir chamado (duplicidade); nada aparece para ele.",
+    inputSchema: z.object({
+      status: z.enum(["open", "resolved", "all"]).optional().describe("open (padrão), resolved ou all"),
+      purpose: z.enum(["show", "check"]).optional().describe("show (padrão): mostra a lista ao funcionário; check: só consulta interna, sem cards"),
+    }),
     execute: async ({ status }, context) => {
       const requesterId = currentUserId(context);
       const open = status === "all" ? undefined : status !== "resolved";
@@ -31,8 +37,9 @@ export const listMyTickets: ToolSpec<{ status?: "open" | "resolved" | "all" }, T
     return `${tickets.length} chamado(s)${overdue ? `, ${overdue} vencido(s)` : ""}`;
   },
   toModel: (tickets) => tickets.map(modelTicket),
-  toPayload: (_i, tickets) => {
-    if (!tickets.length) return undefined;
+  toPayload: (i, tickets) => {
+    // Checagem de duplicidade é interna: a lista inteira (e o "falar com analista" de um vencido qualquer) só confundiria.
+    if (!tickets.length || i.purpose === "check") return undefined;
     const options = tickets.slice(0, 4).map(ticketOption);
     if (tickets.some((t) => t.overdue)) options.push(ANALYST_OPTION);
     return [ticketsPart(tickets), optionsPart(options)];

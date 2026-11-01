@@ -9,9 +9,17 @@
 - 2026-11-01 | etapa 6 | README, páginas do Brain reescritas; SupportAgent → NexoAssistant, HandleMessage → Turn.
 - 2026-11-01 | front | FrontendUI: login, chat do funcionário (SSE + cards) e perfil sobre o contrato v1.
 - 2026-11-01 | docker | Dockerfile (Next standalone, Node 24) e docker-compose com volume para o SQLite.
+- 2026-11-01 | console | Console do analista no front (Anexo C, telas 4 e 5); painel de decisão "Por quê?"/"Ver raciocínio"; confiança baixa em 2 respostas seguidas transfere; `return` direto de `waiting_analyst`; motivo da transferência em texto.
+- 2026-11-01 | auth | NEXO_AUTH_SECRET obrigatório em produção (AUTH_NOT_CONFIGURED); sem fallback para o segredo de dev.
+- 2026-11-01 | duplicidade | Dedup refeito no banco ao gravar (DUPLICATE_TICKET, BEGIN IMMEDIATE), idempotency_key por rascunho, ActionQueue para pedidos confirmados com o sistema fora, relatedTicketId (agent indica paráfrase, flow confere).
+- 2026-11-01 | outbox | Confirmação vira outbox: rascunho sai e ação entra em action_queue na mesma transação; worker retoma itens de processos que caíram (STALE_PROCESSING_MS).
+- 2026-11-01 | duplicidade | list-my-tickets purpose=check (sem cards); iniciar flow zera o payload da mensagem do agent; instrução: duplicidade sempre pelo flow.
+- 2026-11-01 | rascunho | Turno com rascunho mostra só o rascunho; existingTicketDraft como fonte única (corrige prazo NaN e afetados vazios no complemento).
+- 2026-11-01 | central | Busca na central sem payload; cite-articles mostra só artigos usados. Instrução: não narrar fontes ("a central de ajuda não trouxe").
 - 2026-11-01 | llm | Provedor do LLM configurável (`NEXO_LLM_PROVIDER`); padrão passa a ser OpenAI `gpt-5-mini`.
 - 2026-11-01 | env | Environment: `.env` validado com zod (`src/lib/env.ts`) e checagem no boot via `instrumentation.ts`.
 - 2026-11-01 | estrutura | Model router do Mastra (`NEXO_MODEL=openai/gpt-6-luna`, sem `NEXO_LLM_PROVIDER` nem `@ai-sdk/*`); retry nas rotas `/api/tickets`; `assertCanUpdate`/`assertCanReopen` no TicketService.
 - 2026-11-01 | hitl | HumanInTheLoop: open-ticket pergunta suspendendo a run do agent (Mastra suspend/resume, @mastra/libsql); migração 2 (suspended_run); FlowEngine vira fonte de passos para dois drivers.
 - 2026-11-01 | front | RichText: Markdown leve das respostas (negrito, itálico, código, listas) renderizado no chat.
 - 2026-11-01 | persona | Central de ajuda sempre oferece 'Abrir um chamado'; instrução para seguir ao chamado quando o artigo não resolve.
+- 2026-11-01 | merge | HITL + outbox/duplicidade/console na mesma base: `open-ticket` (HITL) absorve `relatedTicketId` e substitui `start-open-ticket-flow`; migração 3 (idempotency_key, action_queue); busca na central devolve só a opção 'Abrir um chamado' (artigos via cite-articles); payload do resultado do chat-formulário acompanha o rascunho.

@@ -20,6 +20,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [HumanInTheLoop](services/HumanInTheLoop.md) — Tool suspende a run do agent para perguntar e retoma com a resposta (Mastra suspend/resume).
 - [PendingAction](services/PendingAction.md) — Rascunho e confirmação obrigatória antes de efeitos.
 - [TicketService](services/TicketService.md) — Sistema de chamados simulado e gateway legado.
+- [ActionQueue](services/ActionQueue.md) — Outbox de ações confirmadas: registro atômico, retomada após queda, fila durante indisponibilidade.
 
 ## Funções
 
@@ -35,7 +36,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [LegacyOutage](conventions/LegacyOutage.md) — Indisponibilidade simulada e retry.
 - [Environment](conventions/Environment.md) — Variáveis validadas com zod, provedor do LLM e checagem no boot.
 - [Persistence](conventions/Persistence.md) — SQLite, migrações, JSON em colunas.
-- [FrontendUI](conventions/FrontendUI.md) — Rotas do front, sessão, SSE/polling e regras de interação dos cards.
+- [FrontendUI](conventions/FrontendUI.md) — Rotas do front, sessão, SSE/polling, cards, console do analista e painel de decisão.
 
 ## Produto
 
@@ -52,6 +53,8 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - `signSession`, `requireSession` → [AuthSession](conventions/AuthSession.md)
 - `priorityFor`, `computeDueAt`, `findRelated` → [ServiceDeskRules](conventions/ServiceDeskRules.md)
 - `legacyGateway`, `withRetry` → [LegacyOutage](conventions/LegacyOutage.md)
+- `recordConfirmedAction`, `processActionQueue`, `startActionQueueWorker`, `withActionId` → [ActionQueue](services/ActionQueue.md)
 - `nexoAssistant`, `openTicketFlow`, `nexoActions`, `openTicket` → [NexoAssistant](services/NexoAssistant.md)
 - `env`, `assertRuntimeEnv`, `apiKeyVarFor` → [Environment](conventions/Environment.md)
-- `api`, `streamMessage`, `SessionProvider`, `ChatScreen` → [FrontendUI](conventions/FrontendUI.md)
+- `api`, `analystApi`, `streamMessage`, `SessionProvider`, `ChatScreen`, `AnalystConsole` → [FrontendUI](conventions/FrontendUI.md)
+- `DecisionDetails`, `LOW_CONFIDENCE_REASON` → [DecisionTrace](entities/DecisionTrace.md)

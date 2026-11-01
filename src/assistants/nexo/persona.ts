@@ -5,7 +5,7 @@
 import type { AssistantConfig } from "@/engine/types";
 import { env } from "@/lib/env";
 import { NEXO_INSTRUCTIONS } from "./instructions";
-import { searchHelpCenter } from "./tools/helpCenter";
+import { citeArticles, searchHelpCenter } from "./tools/helpCenter";
 import { getMyTicket, listMyTickets } from "./tools/tickets";
 import { transferToAnalyst } from "./tools/transfer";
 import { addTicketUpdate, openTicket, reopenTicket } from "./tools/ticketActions";
@@ -18,7 +18,7 @@ export const nexoAssistant: AssistantConfig = {
   model: env().NEXO_MODEL,
   fastModel: env().NEXO_FAST_MODEL,
   instructions: NEXO_INSTRUCTIONS,
-  tools: { searchHelpCenter, listMyTickets, getMyTicket, transferToAnalyst, openTicket, addTicketUpdate, reopenTicket },
+  tools: { searchHelpCenter, citeArticles, listMyTickets, getMyTicket, transferToAnalyst, openTicket, addTicketUpdate, reopenTicket },
   // O flow continua registrado para "Editar X" do rascunho (resumeAtStep); as perguntas iniciais são da tool open-ticket.
   flows: { [openTicketFlow.id]: openTicketFlow },
   actions: nexoActions,

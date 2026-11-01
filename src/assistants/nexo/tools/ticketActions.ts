@@ -13,7 +13,7 @@ import { assertCanReopen, assertCanUpdate, getTicketForRequester, toView } from 
 import { withRetry } from "@/services/tickets/legacyGateway";
 import { TICKET_CATEGORIES } from "@/services/tickets/types";
 import { currentUserId, turnContext } from "./context";
-import { openTicketFlow, TYPE_LABEL, type TicketDraft } from "../flows/openTicket";
+import { existingTicketDraft, openTicketFlow } from "../flows/openTicket";
 
 /** Mesmo formato de `SuspendPrompt` (o engine renderiza `text` + `options`; `stepKey`/`data` voltam para a tool). */
 const suspendSchema = z.object({
@@ -25,11 +25,12 @@ const suspendSchema = z.object({
 });
 const resumeSchema = z.object({ text: z.string().optional(), optionId: z.string().optional() });
 
-type OpenInput = { title?: string; description?: string; type?: "INC" | "REQ"; category?: (typeof TICKET_CATEGORIES)[number]; forceNew?: boolean };
+type OpenInput = { title?: string; description?: string; type?: "INC" | "REQ"; category?: (typeof TICKET_CATEGORIES)[number]; forceNew?: boolean; relatedTicketId?: string };
 
 /** Dados iniciais do chat-formulário a partir do que o agent extraiu da conversa. */
 function prefill(input: OpenInput): FlowData {
   const data: FlowData = {};
+  if (input.relatedTicketId) data.related_hint = input.relatedTicketId.trim().toUpperCase();
   if (input.title) data.title = input.title;
   if (input.description) data.description = input.description;
   if (input.type) data.type = input.type;
@@ -55,6 +56,9 @@ export const openTicket: ToolSpec<OpenInput, FlowOutcomeOutput | undefined> = {
       type: z.enum(["INC", "REQ"]).optional().describe("INC: algo parou/não funciona; REQ: pedido de acesso, equipamento ou software"),
       category: z.enum(TICKET_CATEGORIES).optional(),
       forceNew: z.boolean().optional().describe("true quando o funcionário quer um chamado novo apesar de existir um parecido"),
+      relatedTicketId: z.string().optional().describe(
+        "Id de um chamado do funcionário (aberto, ou resolvido há até 7 dias) que trata do MESMO problema, mesmo descrito com outras palavras (ex.: 'PC demorando depois do update' = 'Notebook lento após atualização do Windows'). Consulte list-my-tickets antes. O sistema confere se o chamado é dele; na dúvida, não preencha.",
+      ),
     }),
     suspendSchema,
     resumeSchema,
@@ -89,8 +93,9 @@ export const openTicket: ToolSpec<OpenInput, FlowOutcomeOutput | undefined> = {
   }),
   summarize: (input, out) => {
     if (!out) return undefined;
-    const keys = Object.keys(prefill(input)).filter((k) => k !== "force_new");
-    return keys.length ? `pré-preenchido: ${keys.join(", ")}` : "sem pré-preenchimento";
+    const keys = Object.keys(prefill(input)).filter((k) => k !== "force_new" && k !== "related_hint");
+    const base = keys.length ? `pré-preenchido: ${keys.join(", ")}` : "sem pré-preenchimento";
+    return input.relatedTicketId ? `${base}; indicou ${input.relatedTicketId.toUpperCase()} como o mesmo problema` : base;
   },
 };
 
@@ -107,7 +112,7 @@ export const addTicketUpdate: ToolSpec<{ ticketId: string; text: string }, Pendi
       if (!ticket) throw notFound("Chamado");
       assertCanUpdate(ticket);
       const view = toView(ticket);
-      const draft: Partial<TicketDraft> = { mode: "update", ticket: view, text, title: view.title, type: view.type, typeLabel: TYPE_LABEL[view.type], category: view.category, priority: view.priority, priorityLabel: view.priorityLabel, related: [] };
+      const draft = existingTicketDraft(view, "update", text, new Date());
       return { kind: "update-ticket", label: `complementar o chamado ${ticket.id}`, input: { ticketId: ticket.id, text }, draft, createdAt: new Date().toISOString() };
     },
   }),
@@ -127,7 +132,7 @@ export const reopenTicket: ToolSpec<{ ticketId: string; reason: string }, Pendin
       if (!ticket) throw notFound("Chamado");
       assertCanReopen(ticket, now);
       const view = toView(ticket, now);
-      const draft: Partial<TicketDraft> = { mode: "reopen", ticket: view, text: reason, title: view.title, type: view.type, typeLabel: TYPE_LABEL[view.type], category: view.category, priority: view.priority, priorityLabel: view.priorityLabel, related: [] };
+      const draft = existingTicketDraft(view, "reopen", reason, now);
       return { kind: "reopen-ticket", label: `reabrir o chamado ${ticket.id}`, input: { ticketId: ticket.id, text: reason }, draft, createdAt: now.toISOString() };
     },
   }),

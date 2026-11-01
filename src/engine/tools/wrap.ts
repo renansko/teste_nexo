@@ -24,6 +24,8 @@ export interface TurnCollector {
   startFlow?: { flowId: string; data: FlowData; intro?: string };
   /** Uma tool suspendeu a run para perguntar ao funcionário. */
   suspended?: { toolId: string; prompt: SuspendPrompt };
+  /** Payload do resultado de um chat-formulário que terminou em rascunho (ex.: o chamado relacionado); fica junto do rascunho. */
+  outcomePayload?: PayloadPart[];
   afterEffects: AfterEffect[];
   notes: string[];
   confirmPending?: boolean;
@@ -128,14 +130,18 @@ function wrapTool(spec: ToolSpec, collector: TurnCollector, emit: (e: ChatEvent)
 
 /** Tool concluiu um chat-formulário (HITL): o rascunho, o payload e as ações sintéticas do resultado entram no turno. */
 function applyOutcome(outcome: FlowOutcome, action: TraceAction, collector: TurnCollector): unknown {
-  if (outcome.payload) collector.payload.push(...outcome.payload);
   if (outcome.trace?.actions) collector.actions.push(...outcome.trace.actions);
   if (outcome.trace?.notes) collector.notes.push(...outcome.trace.notes);
+  // Decisão sintética do chat-formulário (ex.: "o agent indicou que é o mesmo problema"); report-decision do modelo, se vier, prevalece.
+  if (outcome.trace?.decision) collector.decision ??= outcome.trace.decision;
   if (outcome.pendingAction) {
+    // Com rascunho, o turno descarta os cards das consultas; o payload do próprio resultado acompanha o rascunho.
+    collector.outcomePayload = outcome.payload;
     collector.pending = outcome.pendingAction;
     action.summary ??= `rascunho: ${outcome.pendingAction.label}`;
     return awaitingConfirmation(outcome.pendingAction, outcome.text);
   }
+  if (outcome.payload) collector.payload.push(...outcome.payload);
   return { status: "done", summary: outcome.text };
 }
 

@@ -8,9 +8,10 @@ Conversa entre funcionário, assistente (persona) e analista. Código: `src/serv
 
 | Transição | Quem | Onde |
 |---|---|---|
-| `agent → waiting_analyst` | tool `transfer-to-analyst` ou chamado crítico criado | [Turn](../functions/Turn.md) (`AfterEffect` transfer) |
+| `agent → waiting_analyst` | tool `transfer-to-analyst`, chamado crítico criado ou engine (2ª resposta seguida com confiança baixa) | [Turn](../functions/Turn.md) (`AfterEffect` transfer) |
 | `agent|waiting_analyst → analyst` | analista (`take`) | [AnalystConsoleApi](../functions/AnalystConsoleApi.md) |
 | `analyst → agent` | o mesmo analista (`return`) | idem |
+| `waiting_analyst → agent` | qualquer analista (`return`, triagem sem assumir) | idem |
 | `* → closed` | analista (`close`) | idem |
 
 ## Invariantes
@@ -22,6 +23,7 @@ Conversa entre funcionário, assistente (persona) e analista. Código: `src/serv
 - Uma conversa tem no máximo um entre `activeFlow`, `pendingAction` e `suspendedRun` ([HumanInTheLoop](../services/HumanInTheLoop.md)); `take` e `close` limpam os três (e descartam a run suspensa).
 - `ticketId` aponta para o último chamado criado/alterado nesta conversa (`AfterEffect` link-ticket).
 - `transferSummary` sobrevive à devolução ao agent e entra no contexto do modelo ("já passou por um analista").
+- `transferReason` guarda o **código** (`user_request`, `critical`, `overdue`, `low_confidence`); a mensagem de sistema usa o rótulo humano (`AfterEffect.label`), nunca o código.
 - Toda conversa tem `assistant_id` (hoje sempre `nexo`), seam para multi-persona.
 
 ## Mensagens

@@ -7,7 +7,8 @@
 import type { AgentRunner, AgentRunParams } from "@/engine/agent/types";
 
 export interface Script {
-  (p: AgentRunParams, tool: (id: string, input?: Record<string, unknown>) => Promise<unknown>): Promise<string> | string;
+  /** `resumed`: resultado da tool reexecutada na retomada (o que o modelo veria como resultado da tool call). */
+  (p: AgentRunParams, tool: (id: string, input?: Record<string, unknown>) => Promise<unknown>, resumed?: unknown): Promise<string> | string;
 }
 
 interface StoredRun { toolId: string; input: Record<string, unknown>; suspendPayload: unknown }
@@ -28,15 +29,16 @@ export function scriptedRunner(script: Script, calls: AgentRunParams[] = []): Ag
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return t.execute(input, { requestContext: p.requestContext, agent: { agentId: p.config.id, toolCallId: "call", suspend, ...extra } } as any);
     };
+    let resumed: unknown;
     if (p.resume) {
       const stored = runs.get(p.resume.runId);
       if (!stored) throw new Error(`run ${p.resume.runId} não encontrada`);
       runs.delete(p.resume.runId);
-      await run(stored.toolId, stored.input, { resumeData: p.resume.data, suspendPayload: stored.suspendPayload });
+      resumed = await run(stored.toolId, stored.input, { resumeData: p.resume.data, suspendPayload: stored.suspendPayload });
     }
     const tool = (id: string, input: Record<string, unknown> = {}) => run(id, input);
     // Como no Mastra, a run termina na suspensão: texto que o roteiro devolveria depois dela não existe.
-    const text = suspension ? "" : await script(p, tool);
+    const text = suspension ? "" : await script(p, tool, resumed);
     const final = suspension ? "" : text;
     if (final) p.onTextDelta(final);
     const base = { text: final, model: "mock-model", usage: { inputTokens: 100, outputTokens: 20 } };

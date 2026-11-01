@@ -62,10 +62,13 @@ function getRaw(id: string): Ticket | undefined {
 }
 
 /** Inserção direta (seed/testes): não passa pelo gateway e aceita id e datas explícitos. */
-export function insertTicketRaw(t: Ticket): Ticket {
-  getDb().prepare(`INSERT INTO tickets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+export function insertTicketRaw(t: Ticket, idempotencyKey: string | null = null): Ticket {
+  getDb().prepare(
+    `INSERT INTO tickets (id, type, title, description, category, priority, status, requester_id, affected, created_at, updated_at, due_at, resolved_at, idempotency_key)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
     t.id, t.type, t.title, t.description, t.category, t.priority, t.status, t.requesterId, t.affected,
-    t.createdAt, t.updatedAt, t.dueAt, t.resolvedAt,
+    t.createdAt, t.updatedAt, t.dueAt, t.resolvedAt, idempotencyKey,
   );
   const n = Number(t.id.split("-")[1]);
   const db = getDb();
@@ -76,10 +79,32 @@ export function insertTicketRaw(t: Ticket): Ticket {
   return t;
 }
 
-export function insertUpdateRaw(u: Omit<TicketUpdate, "id">): void {
-  getDb().prepare(`INSERT INTO ticket_updates (ticket_id, author_id, author_role, text, created_at) VALUES (?,?,?,?,?)`)
-    .run(u.ticketId, u.authorId, u.authorRole, u.text, u.createdAt);
+export function insertUpdateRaw(u: Omit<TicketUpdate, "id">, idempotencyKey: string | null = null): void {
+  getDb().prepare(`INSERT INTO ticket_updates (ticket_id, author_id, author_role, text, created_at, idempotency_key) VALUES (?,?,?,?,?,?)`)
+    .run(u.ticketId, u.authorId, u.authorRole, u.text, u.createdAt, idempotencyKey);
 }
+
+/** Opções de escrita: `idempotencyKey` torna a operação repetível sem efeito duplo. */
+export interface WriteOptions {
+  idempotencyKey?: string;
+}
+
+const byKey = (key: string | undefined): Ticket | undefined => {
+  if (!key) return undefined;
+  const r = getDb().prepare(`SELECT * FROM tickets WHERE idempotency_key = ?`).get(key) as Row | undefined;
+  return r && toTicket(r);
+};
+
+/** A atualização com esta chave já foi gravada? Devolve o chamado dela. */
+const updateByKey = (key: string | undefined): Ticket | undefined => {
+  if (!key) return undefined;
+  const r = getDb().prepare(`SELECT ticket_id FROM ticket_updates WHERE idempotency_key = ?`).get(key) as { ticket_id: string } | undefined;
+  return r ? getRaw(r.ticket_id) : undefined;
+};
+
+/** Chamado aberto parecido já existe: o serviço recusa criar outro (Anexo A, sem duplicidade). */
+export const duplicateTicketError = (t: Ticket) =>
+  new AppError("DUPLICATE_TICKET", `Já existe o chamado ${t.id} aberto sobre o mesmo problema`, 409, { ticketId: t.id });
 
 export function countTickets(): number {
   return (getDb().prepare(`SELECT COUNT(*) AS n FROM tickets`).get() as { n: number }).n;
@@ -99,9 +124,21 @@ export function assertCanReopen(t: Ticket, now = new Date()): void {
 
 // ---- API pública (passa pelo gateway legado) ----
 
-export function createTicket(input: NewTicket, now = new Date()): Ticket {
+/**
+ * Cria o chamado. Na mesma transação:
+ * 1. mesma `idempotencyKey` já gravada → devolve o chamado existente (repetição segura: duplo clique, fila);
+ * 2. sem `allowSimilar`, chamado ABERTO parecido do mesmo solicitante → `DUPLICATE_TICKET` (rascunhos paralelos).
+ */
+export function createTicket(input: NewTicket, now = new Date(), opts: WriteOptions & { allowSimilar?: boolean } = {}): Ticket {
   return legacyGateway.call(() =>
     transaction(() => {
+      const replay = byKey(opts.idempotencyKey);
+      if (replay) return replay;
+      if (!opts.allowSimilar) {
+        const open = (getDb().prepare(`SELECT * FROM tickets WHERE requester_id = ?`).all(input.requesterId) as unknown as Row[]).map(toTicket);
+        const dup = findRelated(input, open, now).find((r) => r.kind === "duplicate");
+        if (dup) throw duplicateTicketError(dup.ticket);
+      }
       const id = nextId(input.type);
       const iso = now.toISOString();
       const t: Ticket = {
@@ -110,7 +147,7 @@ export function createTicket(input: NewTicket, now = new Date()): Ticket {
         status: "aberto", createdAt: iso, updatedAt: iso,
         dueAt: computeDueAt(input.priority, now).toISOString(), resolvedAt: null,
       };
-      insertTicketRaw(t);
+      insertTicketRaw(t, opts.idempotencyKey ?? null);
       return t;
     }),
   );
@@ -152,14 +189,17 @@ export function addTicketUpdate(
   id: string,
   update: { authorId: string; authorRole: TicketUpdate["authorRole"]; text: string },
   now = new Date(),
+  opts: WriteOptions = {},
 ): Ticket {
   return legacyGateway.call(() =>
     transaction(() => {
+      const replay = updateByKey(opts.idempotencyKey);
+      if (replay) return replay;
       const t = getRaw(id);
       if (!t) throw notFound("Chamado");
       assertCanUpdate(t);
       const iso = now.toISOString();
-      insertUpdateRaw({ ticketId: id, ...update, createdAt: iso });
+      insertUpdateRaw({ ticketId: id, ...update, createdAt: iso }, opts.idempotencyKey ?? null);
       getDb().prepare(`UPDATE tickets SET updated_at = ?, due_at = ? WHERE id = ?`)
         .run(iso, computeDueAt(t.priority, now).toISOString(), id);
       return getRaw(id)!;
@@ -179,14 +219,16 @@ export function updateTicketStatus(id: string, status: TicketStatus, now = new D
 }
 
 /** Reabre chamado resolvido há até 7 dias; volta a `aberto` com novo prazo. */
-export function reopenTicket(id: string, reason: { authorId: string; text: string }, now = new Date()): Ticket {
+export function reopenTicket(id: string, reason: { authorId: string; text: string }, now = new Date(), opts: WriteOptions = {}): Ticket {
   return legacyGateway.call(() =>
     transaction(() => {
+      const replay = updateByKey(opts.idempotencyKey);
+      if (replay) return replay;
       const t = getRaw(id);
       if (!t) throw notFound("Chamado");
       assertCanReopen(t, now);
       const iso = now.toISOString();
-      insertUpdateRaw({ ticketId: id, authorId: reason.authorId, authorRole: "employee", text: `Reaberto: ${reason.text}`, createdAt: iso });
+      insertUpdateRaw({ ticketId: id, authorId: reason.authorId, authorRole: "employee", text: `Reaberto: ${reason.text}`, createdAt: iso }, opts.idempotencyKey ?? null);
       getDb().prepare(`UPDATE tickets SET status = 'aberto', updated_at = ?, due_at = ?, resolved_at = NULL WHERE id = ?`)
         .run(iso, computeDueAt(t.priority, now).toISOString(), id);
       return getRaw(id)!;

@@ -20,8 +20,13 @@ export interface Conversation {
   id: string;
   state: ConversationState;
   ticketId: string | null;
+  employeeId: string;
+  analystId: string | null;
   userMessages: number;
   limit: number;
+  /** Código do motivo da transferência (user_request, critical, overdue, low_confidence). */
+  transferReason: string | null;
+  transferSummary: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,11 +41,21 @@ export interface TraceAction {
   status: ActionStatus;
   summary?: string;
 }
+export type Confidence = "alta" | "media" | "baixa";
+export interface Decision {
+  understanding: string;
+  action: string;
+  confidence: Confidence;
+  reasoning: string;
+}
 export interface Trace {
   source: "agent" | "flow" | "action" | "rule";
   actions: TraceAction[];
-  decision?: { understanding: string; action: string; confidence: "alta" | "media" | "baixa"; reasoning: string };
+  decision?: Decision;
+  model?: string;
+  usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
   durationMs?: number;
+  notes?: string[];
 }
 
 export type TicketPriority = "critica" | "alta" | "media" | "baixa";
@@ -159,6 +174,40 @@ export const api = {
     );
     return { conversation: d.conversation, messages: d.messages.map(toMessage) };
   },
+};
+
+// ---------- Console do analista (docs/brain/functions/AnalystConsoleApi.md) ----------
+
+export interface AnalystConversation extends Conversation {
+  employee: Pick<SessionUser, "id" | "name" | "email" | "department"> | null;
+  analyst: { id: string; name: string } | null;
+  lastMessage: (Omit<ChatMessage, "id"> & { id: string | number }) | null;
+  /** Desde quando aguarda um analista (só em waiting_analyst). */
+  waitingSince: string | null;
+}
+export interface AnalystConversationDetail {
+  conversation: AnalystConversation;
+  messages: ChatMessage[];
+  tickets: TicketView[];
+}
+
+type AnalystMutation = { conversation: AnalystConversation; messages: RawMessage[] };
+const analystPath = (id: string, action = "") => `/api/analyst/conversations/${encodeURIComponent(id)}${action}`;
+const mutate = async (id: string, action: string, body = "{}") => {
+  const d = await request<AnalystMutation>(analystPath(id, action), { method: "POST", body });
+  return { conversation: d.conversation, messages: d.messages.map(toMessage) };
+};
+
+export const analystApi = {
+  list: (q?: string) => request<AnalystConversation[]>(`/api/analyst/conversations${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  async get(id: string): Promise<AnalystConversationDetail> {
+    const d = await request<{ conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] }>(analystPath(id));
+    return { conversation: d.conversation, messages: d.messages.map(toMessage), tickets: d.tickets };
+  },
+  take: (id: string) => mutate(id, "/take"),
+  reply: (id: string, text: string) => mutate(id, "/messages", JSON.stringify({ text })),
+  giveBack: (id: string) => mutate(id, "/return"),
+  close: (id: string) => mutate(id, "/close"),
 };
 
 // ---------- SSE ----------

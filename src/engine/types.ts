@@ -128,6 +128,8 @@ export interface SuspendedRun {
 // ---- Ação pendente (confirmação obrigatória antes de efeito colateral) ----
 
 export interface PendingAction {
+  /** Id do rascunho; é a chave de idempotência da execução (atribuído pelo engine ao gravar). */
+  id?: string;
   /** Nome do executor registrado na persona (ex.: "create-ticket"). */
   kind: string;
   /** Dados necessários para executar; ficam persistidos. */
@@ -141,13 +143,27 @@ export interface PendingAction {
   createdAt: string;
 }
 
-export interface ActionContext { userId: string; conversationId: string; now: Date }
+export interface ActionContext {
+  userId: string;
+  conversationId: string;
+  now: Date;
+  /** Chave de idempotência (id do rascunho): repetir a execução com a mesma chave não grava duas vezes. */
+  idempotencyKey?: string;
+}
 
-export interface ActionResult { text: string; payload?: Payload; trace?: Partial<Trace>; afterEffects?: AfterEffect[] }
+export interface ActionResult {
+  text: string;
+  payload?: Payload;
+  trace?: Partial<Trace>;
+  afterEffects?: AfterEffect[];
+  /** Novo rascunho a confirmar (ex.: a criação virou complemento porque surgiu um duplicado). */
+  pendingAction?: PendingAction;
+}
 
 /** Efeitos que o engine aplica após uma ação/turno (regras determinísticas da persona). */
 export type AfterEffect =
-  | { type: "transfer"; reason: string; summary: string }
+  /** `reason` é o código (vai para `transferReason`); `label` é o texto humano exibido na mensagem de sistema. */
+  | { type: "transfer"; reason: string; label?: string; summary: string }
   | { type: "link-ticket"; ticketId: string };
 
 // ---- Tools ----
