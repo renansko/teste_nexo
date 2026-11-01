@@ -17,6 +17,10 @@ export interface Session { user: Employee; claims: SessionClaims }
 function secret(): string {
   const s = process.env.NEXO_AUTH_SECRET;
   if (s) return s;
+  // Em produção o segredo de desenvolvimento é público (está no código): aceitar permitiria forjar sessões de analista.
+  if (process.env.NODE_ENV === "production") {
+    throw new AppError("AUTH_NOT_CONFIGURED", "Autenticação indisponível: servidor sem NEXO_AUTH_SECRET configurado", 500);
+  }
   if (!warned && process.env.NODE_ENV !== "test") {
     warned = true;
     console.warn("[auth] NEXO_AUTH_SECRET não definido; usando segredo de desenvolvimento.");

@@ -14,6 +14,24 @@ test("assina, verifica e expira", () => {
   assert.equal(verifySession("lixo", now), null);
 });
 
+test("em produção, sem NEXO_AUTH_SECRET, recusa assinar e verificar (segredo de dev não vale)", () => {
+  const env = process.env as Record<string, string | undefined>;
+  const saved = { node: env.NODE_ENV, secret: env.NEXO_AUTH_SECRET };
+  const forged = signSession({ sub: "an-fabio", role: "analyst" }); // assinado com o segredo de dev
+  try {
+    env.NODE_ENV = "production";
+    delete env.NEXO_AUTH_SECRET;
+    assert.throws(() => signSession({ sub: "emp-ana", role: "employee" }), { code: "AUTH_NOT_CONFIGURED" });
+    assert.throws(() => verifySession(forged), { code: "AUTH_NOT_CONFIGURED" });
+    env.NEXO_AUTH_SECRET = "segredo-de-producao";
+    assert.equal(verifySession(forged), null);
+  } finally {
+    env.NODE_ENV = saved.node;
+    if (saved.secret === undefined) delete env.NEXO_AUTH_SECRET;
+    else env.NEXO_AUTH_SECRET = saved.secret;
+  }
+});
+
 test("resolve sessão por Bearer e por cookie; exige role", () => {
   const token = signSession({ sub: "emp-ana", role: "employee" });
   const bearer = new Request("http://x/api", { headers: { authorization: `Bearer ${token}` } });
