@@ -1,0 +1,286 @@
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 7px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+
+.chip:disabled {
+  cursor: default;
+  color: var(--ink-3);
+}
+
+.card {
+  width: 100%;
+  max-width: 640px;
+  border: 1px solid var(--card-line);
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px 14px;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 2px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.eyebrowId {
+  font-weight: 400;
+}
+
+.sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--rule);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.state i,
+.dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.description {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px 24px;
+  margin: 0 18px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldKey {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.fieldValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.muted {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.related {
+  margin: -6px 18px 14px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 8px 8px;
+  border-top: 1px solid var(--rule);
+  background: var(--desk);
+}
+
+.btnPrimary,
+.btnSecondary,
+.btnGhost {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.btnPrimary {
+  border: 0;
+  background: var(--cta);
+  color: #fff;
+  font-weight: 600;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--cta-hover);
+}
+
+.btnSecondary {
+  border: 1px solid var(--line-soft);
+  background: var(--paper);
+  box-shadow: var(--shadow-control);
+}
+
+.btnGhost {
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+}
+
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ticketRow {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.ticketRow + .ticketRow {
+  border-top: 1px solid var(--rule);
+}
+
+.ticketRow:hover:not(:disabled) {
+  background: #0062c40a;
+}
+
+.ticketRow:hover:not(:disabled) .radio {
+  border-color: var(--cta);
+}
+
+.ticketRow:disabled {
+  cursor: default;
+}
+
+.radio {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid #1b243133;
+  border-radius: 999px;
+}
+
+.ticketId {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.ticketTitle {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticketStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.ticketDate {
+  width: 44px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.article + .article {
+  border-top: 1px solid var(--rule);
+}
+
+.article summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.article summary::-webkit-details-marker {
+  display: none;
+}
+
+.article p {
+  margin: 0;
+  padding: 0 16px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .ticketStatus,
+  .ticketDate {
+    display: none;
+  }
+}

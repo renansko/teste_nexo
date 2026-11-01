@@ -1,0 +1,74 @@
+/* Tokens do protótipo (Anexo C, arquivo nexo.pen). @wiki docs/brain/conventions/FrontendUI.md */
+:root {
+  --paper: #ffffff;
+  --desk: #f6f7f9;
+  --ink: #1b2431;
+  --ink-2: #3d4656;
+  --ink-3: #5b6472;
+  --rule: #e6e8ec;
+  --cta: #0062c4;
+  --cta-hover: #0055ab;
+
+  --primary: #0285f7;
+  --primary-soft: #0285f712;
+  --primary-text: #0069c7;
+  --success: #00bd6c;
+  --success-soft: #00bd6c14;
+  --success-text: #00804a;
+  --warning: #f5a500;
+  --warning-soft: #f5a50018;
+  --warning-text: #946300;
+  --danger: #ee343b;
+  --danger-soft: #ee343b12;
+  --danger-text: #c4161d;
+  --violet: #a37aff;
+  --violet-soft: #a37aff16;
+  --violet-text: #6b3fe0;
+
+  --line-soft: #1b24311f;
+  --card-line: #1b243117;
+  --shadow-card: 0 1px 2px #1b24310d, 0 6px 18px #1b24310a;
+  --shadow-control: 0 1px 2px #1b24310a;
+
+  --font-ui: var(--font-schibsted), system-ui, sans-serif;
+  --font-display: var(--font-newsreader), Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
