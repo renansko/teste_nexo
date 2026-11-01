@@ -12,7 +12,7 @@ import {
 } from "@/services/conversations/conversationService";
 import { getAssistant } from "../registry";
 import type { AgentRunner } from "../agent/types";
-import { createMastraRunner } from "../agent/mastraRunner";
+import { agentError, createMastraRunner } from "../agent/mastraRunner";
 import { newCollector, wrapTools, type TurnCollector } from "../tools/wrap";
 import { advanceFlow, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
 import { interpretPendingInput, pendingParts } from "../actions/pending";
@@ -232,6 +232,8 @@ class TurnHelpers {
       system: buildSystemContext(this.config, conv, user, this.now),
       requestContext,
       onTextDelta: (delta) => this.emit({ type: "text.delta", delta }),
+    }).catch((e: unknown) => {
+      throw e instanceof AppError ? e : agentError(e);
     });
 
     let text = result.text.trim();

@@ -10,6 +10,15 @@ import type { AgentRunner } from "./types";
 
 type ModelConfig = ConstructorParameters<typeof Agent>[0]["model"];
 
+export const AGENT_ERROR_MESSAGE = "Não consegui consultar o assistente agora. Tente novamente em instantes.";
+
+/** Detalhe técnico vai para o log do servidor; o cliente recebe mensagem genérica (sem vazar provedor/chaves). */
+export function agentError(cause: unknown): AppError {
+  const detail = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : JSON.stringify(cause);
+  console.error("[agent] falha ao consultar o modelo:", detail);
+  return new AppError("AGENT_ERROR", AGENT_ERROR_MESSAGE, 502);
+}
+
 export function createMastraRunner(opts: { model?: (id: string) => ModelConfig } = {}): AgentRunner {
   const resolveModel = opts.model ?? ((id: string) => anthropic(id) as unknown as ModelConfig);
   return async ({ config, tools, messages, system, requestContext, onTextDelta }) => {
@@ -40,9 +49,7 @@ export function createMastraRunner(opts: { model?: (id: string) => ModelConfig }
         text += chunk.payload.text;
         onTextDelta(chunk.payload.text);
       } else if (chunk.type === "error") {
-        const err = chunk.payload.error;
-        const message = err instanceof Error ? err.message : typeof err === "string" ? err : JSON.stringify(err);
-        throw new AppError("AGENT_ERROR", `Falha ao consultar o modelo: ${message}`, 502);
+        throw agentError(chunk.payload.error);
       }
     }
 
