@@ -81,11 +81,12 @@ function Dot({ color }: { color: string }) {
   return <i className={styles.dot} style={{ background: color }} aria-hidden />;
 }
 
-const OPTION_STYLE: Record<string, string | undefined> = {
-  confirm: styles.btnPrimary,
-  edit: styles.btnSecondary,
-  cancel: styles.btnGhost,
-};
+/** Ids do rascunho: `confirm`, `edit:<campo>`, `cancel`. */
+function optionStyle(id: string): string | undefined {
+  if (id === "confirm") return styles.btnPrimary;
+  if (id === "cancel") return styles.btnGhost;
+  return styles.btnSecondary;
+}
 
 function DraftCard({ draft, options, interactive, onOption }: { draft: DraftTicket; options: Option[] } & PayloadHandlers) {
   return (
@@ -121,7 +122,7 @@ function DraftCard({ draft, options, interactive, onOption }: { draft: DraftTick
             <button
               key={o.id}
               type="button"
-              className={OPTION_STYLE[o.id] ?? styles.btnSecondary}
+              className={optionStyle(o.id)}
               disabled={!interactive}
               onClick={() => onOption(o)}
             >

@@ -28,7 +28,10 @@ const STATUS: Record<Conversation["state"], { tone: Tone; label: string }> = {
 const ERRORS: Record<string, string> = {
   MESSAGE_LIMIT: "Esta conversa chegou ao limite de mensagens. Comece uma nova conversa para continuar.",
   CONVERSATION_CLOSED: "Esta conversa foi encerrada. Comece uma nova conversa para continuar.",
+  AGENT_ERROR: "O assistente não conseguiu responder agora. Tente de novo em instantes.",
 };
+
+const EMPTY_TURN: { actions: TraceAction[]; text: string } = { actions: [], text: "" };
 
 /** Polling de respostas do analista: mais frequente quando há analista envolvido. */
 const POLL_ANALYST_MS = 3000;
@@ -107,15 +110,26 @@ export function ChatScreen() {
         setConversation(conv);
         setMessages([optimistic]);
       }
-      if (conv.state === "agent") setStreaming({ actions: [], text: "" });
+      if (conv.state === "agent") setStreaming(EMPTY_TURN);
       const id = conv.id;
+      // Um turno pode gerar várias mensagens (resposta + aviso de sistema, resposta + pergunta do flow),
+      // cada uma com seu message.start/message.end.
       await streamMessage(id, input, (e) => {
         switch (e.type) {
+          case "message.start":
+            setStreaming(EMPTY_TURN);
+            break;
           case "action":
-            setStreaming((s) => s && { ...s, actions: upsert(s.actions, e.data) });
+            setStreaming((s) => {
+              const cur = s ?? EMPTY_TURN;
+              return { ...cur, actions: upsert(cur.actions, e.data) };
+            });
             break;
           case "text.delta":
-            setStreaming((s) => s && { ...s, text: s.text + e.data.delta });
+            setStreaming((s) => {
+              const cur = s ?? EMPTY_TURN;
+              return { ...cur, text: cur.text + e.data.delta };
+            });
             break;
           case "conversation":
             setConversation((c) => (c ? { ...c, ...e.data } : c));
@@ -125,7 +139,7 @@ export function ChatScreen() {
             setStreaming(null);
             break;
           case "error":
-            setError(ERRORS[e.data.code] ?? e.data.message ?? "O assistente não conseguiu responder. Tente de novo.");
+            setError(ERRORS[e.data.code] ?? e.data.message ?? ERRORS.AGENT_ERROR);
             break;
         }
       });
@@ -166,7 +180,7 @@ export function ChatScreen() {
         </p>
       )}
       <Composer
-        disabled={sending || blocked}
+        disabled={!loaded || sending || blocked}
         placeholder={blocked ? "Comece uma nova conversa para continuar" : undefined}
         onSend={(text) => void send({ text }, text)}
         meta={
