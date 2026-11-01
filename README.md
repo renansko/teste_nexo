@@ -54,7 +54,8 @@ Na interface, os rótulos aparecem acima de cada resposta (como no protótipo) e
 
 - Regras do service desk em código testado (`src/services/tickets/*.test.ts`), não em prompt.
 - Efeitos colaterais só por ação confirmada; o executor roda sem LLM.
-- Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. O sistema legado simulado fica indisponível às vezes (`NEXO_TICKETS_OUTAGE_RATE`); há retry com backoff e, se persistir, o rascunho é mantido para nova tentativa.
+- Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. O sistema legado simulado fica indisponível às vezes (`NEXO_TICKETS_OUTAGE_RATE`); há retry com backoff e, se persistir depois que o funcionário confirmou, o pedido vai para uma fila (`action_queue`) e é registrado quando o sistema volta, com o resultado postado na conversa.
+- Sem duplicidade em três camadas: o agent indica o chamado relacionado quando reconhece o mesmo problema com outras palavras (o flow confere se é do funcionário); o flow compara por similaridade ao montar o rascunho; e o serviço recompara na transação de gravação, o que cobre rascunhos paralelos e pedidos que esperaram na fila. Cada rascunho tem uma chave de idempotência única no banco: confirmar duas vezes ou reprocessar a fila não grava duas vezes. Testes de ponta a ponta em `src/assistants/nexo/flows/dedup.validation.test.ts`.
 - Testes de orquestração com runner roteirizado (sem rede) e teste de integração com modelo Mastra simulado cobrindo tool call + `requestContext`.
 - Instruções obrigam `report-decision`; o engine usa a confiança declarada como gatilho de segurança.
 
@@ -83,7 +84,8 @@ curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $
 ## Trade-offs e próximos passos
 
 - **Tipo/categoria sem LLM extra.** O agent pré-preenche o que já sabe; o flow pergunta o resto com opções. Zero custo e previsível, ao preço de uma pergunta a mais quando o agent não tem certeza. Com mais tempo: classificador com modelo rápido (`NEXO_FAST_MODEL`) e confiança, caindo para a pergunta só abaixo de um limiar.
-- **Duplicidade lexical.** Jaccard sobre tokens funciona para a base pequena; em produção, embeddings.
+- **Duplicidade sem busca semântica.** A similaridade é lexical (Jaccard sobre tokens) e não pega sinônimos ("PC demorando depois do update" × "Notebook lento após atualização"). Com poucos chamados por funcionário, o próprio agent indica o chamado relacionado e o código confere, sem custo extra. Com a base maior: busca semântica (embeddings dos chamados do funcionário) como camada determinística.
+- **Fila em processo.** O worker da fila roda dentro do servidor (`setInterval`); o claim atômico evita trabalho duplo entre instâncias, mas em produção seria um worker dedicado.
 - **Polling para o analista.** Simples e funciona em qualquer hospedagem; um canal SSE de assinatura por conversa seria o passo seguinte.
 - **Multi-persona.** O engine já isola a persona (`AssistantConfig`) e grava `assistant_id`; falta tabela de personas, chaves de API por integrador e endpoints de administração.
 - **Migrações.** Versionadas em código, sem ferramenta externa; suficiente para SQLite.

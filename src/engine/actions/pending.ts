@@ -3,6 +3,7 @@
  * O rascunho vai ao cliente como payload `draft` + opções Confirmar / (editar...) / Cancelar.
  * @wiki docs/brain/services/PendingAction.md
  */
+import { randomUUID } from "node:crypto";
 import { PAYLOAD_DRAFT, PAYLOAD_OPTIONS, type PayloadPart, type PendingAction, type QuickOption, type TurnInput } from "../types";
 
 export const CONFIRM_OPTION: QuickOption = { id: "confirm", label: "Confirmar" };
@@ -11,6 +12,11 @@ export const EDIT_PREFIX = "edit:";
 
 const CONFIRM_TEXT = /^(sim|confirmar?|confirmo|ok|pode (criar|abrir|atualizar|reabrir|enviar|mandar)|isso|correto|certo|perfeito)[.!]?$/i;
 const CANCEL_TEXT = /^(n[ãa]o|cancelar?|cancela|desist[oi]r?|deixa (pra|para) l[áa])[.!]?$/i;
+
+/** Garante o id do rascunho: ele é a chave de idempotência da execução (confirmar duas vezes, fila). */
+export function withActionId(p: PendingAction): PendingAction & { id: string } {
+  return p.id ? (p as PendingAction & { id: string }) : { ...p, id: randomUUID() };
+}
 
 export function pendingParts(p: PendingAction): PayloadPart[] {
   return [

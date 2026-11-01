@@ -15,7 +15,9 @@ import type { AgentRunner } from "../agent/types";
 import { agentError, createMastraRunner } from "../agent/mastraRunner";
 import { newCollector, wrapTools, type TurnCollector } from "../tools/wrap";
 import { advanceFlow, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
-import { interpretPendingInput, pendingParts } from "../actions/pending";
+import { interpretPendingInput, pendingParts, withActionId } from "../actions/pending";
+import { enqueueAction, isTemporarilyUnavailable } from "../actions/queue";
+import { ANALYST_OPTION, applyAfterEffects } from "./effects";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
 import {
@@ -34,7 +36,7 @@ export interface TurnParams {
 
 export interface TurnResult { conversation: Conversation; messages: Message[] }
 
-export const ANALYST_OPTION: QuickOption = { id: "falar-com-um-analista", label: "Falar com um analista" };
+export { ANALYST_OPTION };
 
 /** Código de `transferReason` quando o engine transfere por falta de segurança do agent. */
 export const LOW_CONFIDENCE_REASON = "low_confidence";
@@ -155,13 +157,6 @@ class TurnHelpers {
     return m;
   }
 
-  system(text: string): Message {
-    const m = addMessage(this.conversationId, { role: "system", content: text });
-    this.produced.push(m);
-    this.emit({ type: "message.end", message: m });
-    return m;
-  }
-
   async applyFlowResult(r: FlowStepResult, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
     const started = Date.now();
     if (r.kind === "ask") {
@@ -179,7 +174,7 @@ class TurnHelpers {
     const payload: Payload = [...(r.outcome.payload ?? [])];
     let pending: PendingAction | null = null;
     if (r.outcome.pendingAction) {
-      pending = r.outcome.pendingAction;
+      pending = withActionId(r.outcome.pendingAction);
       payload.push(...pendingParts(pending));
     }
     updateConversation(this.conversationId, { activeFlow: null, pendingAction: pending }, this.now);
@@ -187,22 +182,43 @@ class TurnHelpers {
     void ctx;
   }
 
-  async executePending(pending: PendingAction, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
+  async executePending(draft: PendingAction, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
     const started = Date.now();
+    const pending = withActionId(draft); // rascunhos antigos (sem id) ganham um agora
     const executor = this.config.actions[pending.kind];
     if (!executor) throw new AppError("ACTION_UNKNOWN", `Ação '${pending.kind}' não registrada`, 500);
     updateConversation(this.conversationId, { pendingAction: null }, this.now);
     try {
-      const result = await executor(pending.input, ctx);
-      this.reply(result.text, result.payload ?? [], { source: "action", ...result.trace }, started);
+      const result = await executor(pending.input, { ...ctx, idempotencyKey: pending.id });
+      let payload: Payload = result.payload ?? [];
+      if (result.pendingAction) {
+        // O executor trocou a ação (ex.: surgiu um chamado parecido): novo rascunho, nova confirmação.
+        const next = withActionId({ ...result.pendingAction, createdAt: this.now.toISOString() });
+        updateConversation(this.conversationId, { pendingAction: next }, this.now);
+        payload = [...payload.filter((x) => x.kind !== PAYLOAD_OPTIONS), ...pendingParts(next)];
+      }
+      this.reply(result.text, payload, { source: "action", ...result.trace }, started);
       this.applyAfterEffects(result.afterEffects ?? []);
     } catch (e) {
       const code = e instanceof AppError ? e.code : "ERROR";
-      // Falha ao executar (ex.: legado indisponível): mantém o rascunho para tentar de novo.
+      if (isTemporarilyUnavailable(e)) {
+        // Já confirmado pelo funcionário: vai para a fila e é registrado quando o sistema voltar (mesma chave → sem duplicar).
+        const queued = enqueueAction({ conversationId: this.conversationId, userId: ctx.userId, pending, error: code, now: this.now });
+        this.reply(
+          "O sistema de chamados está fora do ar agora. Seu pedido já está confirmado e ficou na fila: vou registrá-lo assim que o sistema voltar e aviso você aqui nesta conversa.",
+          [],
+          {
+            source: "action",
+            actions: [{ id: "queue", tool: pending.kind, label: `${pending.label}: na fila`, status: "done", summary: "aguardando o sistema de chamados voltar" }],
+            notes: [`${pending.kind}: ${code}; enfileirado (${queued.id})`],
+          },
+          started,
+        );
+        return;
+      }
+      // Outra falha: mantém o rascunho para o funcionário tentar de novo.
       updateConversation(this.conversationId, { pendingAction: pending }, this.now);
-      const text = code === "TICKET_SERVICE_UNAVAILABLE"
-        ? "O sistema de chamados está instável neste momento e não consegui concluir. O rascunho continua salvo: tente confirmar novamente em alguns segundos."
-        : `Não consegui concluir: ${e instanceof Error ? e.message : String(e)}. O rascunho continua salvo.`;
+      const text = `Não consegui concluir: ${e instanceof Error ? e.message : String(e)}. O rascunho continua salvo.`;
       this.reply(text, pendingParts(pending), {
         source: "action",
         actions: [{ id: "exec", tool: pending.kind, label: pending.label, status: "error", summary: code }],
@@ -212,15 +228,9 @@ class TurnHelpers {
   }
 
   applyAfterEffects(effects: AfterEffect[]): void {
-    for (const e of effects) {
-      if (e.type === "transfer") {
-        const conv = getConversation(this.conversationId)!;
-        if (conv.state !== "agent") continue;
-        updateConversation(this.conversationId, { state: "waiting_analyst", transferReason: e.reason, transferSummary: e.summary }, this.now);
-        this.system(`Conversa transferida para um analista. Motivo: ${e.label ?? e.reason}. Resumo: ${e.summary}`);
-      } else if (e.type === "link-ticket") {
-        updateConversation(this.conversationId, { ticketId: e.ticketId }, this.now);
-      }
+    for (const m of applyAfterEffects(this.conversationId, effects, this.now)) {
+      this.produced.push(m);
+      this.emit({ type: "message.end", message: m });
     }
   }
 
@@ -250,7 +260,7 @@ class TurnHelpers {
     let pending: PendingAction | null | undefined = undefined;
 
     if (collector.pending) {
-      pending = { ...collector.pending, createdAt: this.now.toISOString() };
+      pending = withActionId({ ...collector.pending, createdAt: this.now.toISOString() });
       payload = [...payload.filter((x) => x.kind !== PAYLOAD_OPTIONS), ...pendingParts(pending)];
     } else if (collector.cancelPending) {
       pending = null;

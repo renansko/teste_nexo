@@ -22,6 +22,9 @@ Crítica 1 h corrida; Alta 4 h úteis; Média 3 dias úteis; Baixa 5 dias úteis
 - Candidatos: só chamados do próprio funcionário. Similaridade Jaccard de tokens (sem acentos/stopwords) sobre título+descrição, +0.1 se mesma categoria; limiar 0.25.
 - Aberto parecido → `duplicate` (propor complemento). Resolvido há ≤ 7 dias parecido → `reopenable` (propor reabrir). Mais antigo → ignorado.
 - Reabrir fora da janela → `REOPEN_NOT_ALLOWED`.
+- Três camadas: (1) o agent indica `relatedTicketId` quando reconhece o mesmo problema com outras palavras, e o flow confere se é do funcionário e se está aberto/reabrível; (2) o flow compara por similaridade ao montar o rascunho; (3) o serviço recompara ao gravar, na transação ([TicketService](../services/TicketService.md)). A (3) pega rascunhos paralelos e rascunhos montados com o sistema fora.
+- Trade-off: similaridade lexical não pega sinônimos ("PC"/"notebook"); a camada (1) cobre isso com custo zero extra. Busca semântica (embeddings) fica para quando a base crescer.
+- Testes de ponta a ponta: `src/assistants/nexo/flows/dedup.validation.test.ts`.
 
 ## Outras regras
 

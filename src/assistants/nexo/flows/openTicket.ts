@@ -8,9 +8,10 @@ import type { FlowData, FlowDefinition, PendingAction, QuickOption, Trace, Trace
 import { EDIT_PREFIX } from "@/engine/actions/pending";
 import { IMPACT_LABEL, IMPACTS, priorityFor, URGENCIES, URGENCY_LABEL, type Impact, type Urgency } from "@/services/tickets/priority";
 import { computeDueAt, SLA_LABEL } from "@/services/tickets/sla";
-import { findRelatedTickets, toView, type TicketView } from "@/services/tickets/ticketService";
+import { findRelatedTickets, getTicketForRequester, toView, type TicketView } from "@/services/tickets/ticketService";
+import { canReopen, type RelatedTicket } from "@/services/tickets/dedup";
 import { withRetry } from "@/services/tickets/legacyGateway";
-import { PRIORITY_LABEL, TICKET_CATEGORIES, type TicketCategory, type TicketPriority, type TicketType } from "@/services/tickets/types";
+import { isOpenStatus, PRIORITY_LABEL, TICKET_CATEGORIES, type TicketCategory, type TicketPriority, type TicketType } from "@/services/tickets/types";
 import { ticketsPart } from "../payload";
 
 export const OPEN_TICKET_FLOW = "open-ticket";
@@ -75,20 +76,35 @@ export const openTicketFlow: FlowDefinition = {
     const dueAt = computeDueAt(priority, ctx.now).toISOString();
     actions.push({ id: "prio", tool: "priority-rule", label: "classificou a prioridade", status: "done", summary: `${PRIORITY_LABEL[priority]}: ${reason}` });
 
-    let related: ReturnType<typeof findRelatedTickets> = [];
+    let related: RelatedTicket[] = [];
+    let dedupChecked = true;
+    /** Chamado que o agent indicou como "o mesmo problema" (pega paráfrases); conferido aqui, nunca aceito às cegas. */
+    let hinted: RelatedTicket | undefined;
     if (data.force_new !== "1") {
       try {
         const r = await withRetry(() => findRelatedTickets(ctx.userId, { title: data.title!, description: data.description, category }, ctx.now));
         related = r.result;
         if (r.attempts > 1) notes.push(`sistema de chamados instável: ${r.attempts} tentativas`);
-        actions.push({ id: "dedup", tool: "dedup-rule", label: "verificou duplicidade", status: "done", summary: related.length ? `${related.length} chamado(s) parecido(s): ${related.map((x) => x.ticket.id).join(", ")}` : "nenhum chamado parecido" });
+        if (data.related_hint) {
+          const t = (await withRetry(() => getTicketForRequester(data.related_hint!, ctx.userId))).result;
+          const kind = t && (isOpenStatus(t.status) ? "duplicate" : canReopen(t, ctx.now) ? "reopenable" : undefined);
+          if (t && kind) {
+            hinted = { ticket: t, score: 1, kind };
+            related = [hinted, ...related.filter((x) => x.ticket.id !== t.id)];
+          } else {
+            notes.push(`indicação do agent ignorada: ${data.related_hint} não é chamado aberto (ou resolvido há até 7 dias) deste funcionário`);
+          }
+        }
+        actions.push({ id: "dedup", tool: "dedup-rule", label: "verificou duplicidade", status: "done", summary: related.length ? `${related.length} chamado(s) parecido(s): ${related.map((x) => x.ticket.id).join(", ")}${hinted ? ` (${hinted.ticket.id} indicado pelo agent)` : ""}` : "nenhum chamado parecido" });
       } catch {
-        notes.push("não foi possível verificar duplicidade (sistema de chamados indisponível)");
+        dedupChecked = false;
+        notes.push("não foi possível verificar duplicidade (sistema de chamados indisponível); a checagem é refeita ao gravar");
         actions.push({ id: "dedup", tool: "dedup-rule", label: "verificou duplicidade", status: "error", summary: "sistema de chamados indisponível" });
       }
     } else {
       notes.push("funcionário pediu um chamado novo apesar de parecido existente");
     }
+    const why = (r: RelatedTicket) => (r === hinted ? "o agent indicou que é o mesmo problema (conferido: é deste funcionário)" : `similaridade ${r.score.toFixed(2)}`);
 
     const base: Omit<TicketDraft, "mode"> = {
       title: data.title!, description: data.description!, type, typeLabel: TYPE_LABEL[type], category,
@@ -119,7 +135,7 @@ export const openTicketFlow: FlowDefinition = {
       return {
         text: `Você já tem o chamado ${ticket.id} (${ticket.title}) ${ticket.statusLabel.toLowerCase()}${ticket.overdue ? ", e ele está vencido" : ""}. Para não duplicar, proponho complementá-lo com o que você me contou agora. Confere o rascunho?`,
         payload: [ticketsPart([ticket])], pendingAction,
-        trace: trace("abrir chamado sobre um problema que já tem chamado aberto", "propôs complementar o chamado existente", `Anexo A: sem duplicidade; ${ticket.id} é parecido (similaridade ${dup.score.toFixed(2)})`),
+        trace: trace("abrir chamado sobre um problema que já tem chamado aberto", "propôs complementar o chamado existente", `Anexo A: sem duplicidade; ${ticket.id} é parecido (${why(dup)})`),
       };
     }
 
@@ -136,14 +152,14 @@ export const openTicketFlow: FlowDefinition = {
       return {
         text: `O chamado ${ticket.id} (${ticket.title}) foi resolvido há poucos dias e parece ser o mesmo problema. Posso reabri-lo em vez de criar um novo. Confere o rascunho?`,
         payload: [ticketsPart([ticket])], pendingAction,
-        trace: trace("abrir chamado sobre problema resolvido recentemente", "propôs reabrir o chamado", `Anexo A: resolvidos há até 7 dias podem ser reabertos; ${ticket.id} é parecido`),
+        trace: trace("abrir chamado sobre problema resolvido recentemente", "propôs reabrir o chamado", `Anexo A: resolvidos há até 7 dias podem ser reabertos; ${ticket.id} é parecido (${why(reopen)})`),
       };
     }
 
     const draft: TicketDraft = { ...base, mode: "create" };
     const pendingAction: PendingAction = {
       kind: "create-ticket", label: "criar o chamado",
-      input: { title: draft.title, description: draft.description, type, category, priority, affected: draft.affected, flow: flowSnapshot }, draft,
+      input: { title: draft.title, description: draft.description, type, category, priority, affected: draft.affected, forceNew: data.force_new === "1", flow: flowSnapshot }, draft,
       extraOptions: editOptions, createdAt: ctx.now.toISOString(),
     };
     const lines = [
@@ -152,6 +168,7 @@ export const openTicketFlow: FlowDefinition = {
       `• Título: ${draft.title}`,
       `• Prioridade ${PRIORITY_LABEL[priority]} (${reason}) · prazo ${SLA_LABEL[priority]}, até ${formatDateTime(dueAt)}`,
       `• Afetados: ${draft.affected}`,
+      ...(dedupChecked ? [] : ["O sistema de chamados está instável e não consegui verificar se você já tem um chamado parecido; confiro de novo na hora de gravar."]),
       `Posso criar?`,
     ];
     return {

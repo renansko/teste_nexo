@@ -95,6 +95,33 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_messages_conv ON messages(conversation_id, id);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      -- Idempotência: a mesma ação confirmada (chave = id do rascunho) nunca grava duas vezes.
+      ALTER TABLE tickets ADD COLUMN idempotency_key TEXT;
+      CREATE UNIQUE INDEX idx_tickets_idempotency ON tickets(idempotency_key) WHERE idempotency_key IS NOT NULL;
+      ALTER TABLE ticket_updates ADD COLUMN idempotency_key TEXT;
+      CREATE UNIQUE INDEX idx_ticket_updates_idempotency ON ticket_updates(idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+      -- Fila de ações confirmadas que não puderam ser executadas (sistema de chamados fora do ar).
+      CREATE TABLE action_queue (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL,
+        input TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued','processing','done','failed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT NOT NULL,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_action_queue_due ON action_queue(status, next_attempt_at);
+    `,
+  },
 ];
 
 let db: DatabaseSync | undefined;
@@ -136,10 +163,14 @@ export function closeDb(): void {
   db = undefined;
 }
 
-/** Executa `fn` numa transação; faz rollback se lançar. */
+/**
+ * Executa `fn` numa transação; faz rollback se lançar.
+ * IMMEDIATE pega o lock de escrita no início: "ler, decidir e gravar" (ex.: checar duplicidade e inserir)
+ * fica serializado mesmo com mais de um processo no mesmo arquivo.
+ */
 export function transaction<T>(fn: () => T): T {
   const conn = getDb();
-  conn.exec("BEGIN");
+  conn.exec("BEGIN IMMEDIATE");
   try {
     const out = fn();
     conn.exec("COMMIT");

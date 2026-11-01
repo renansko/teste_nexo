@@ -9,7 +9,7 @@ Persona "Nexo Assist". Código: `src/assistants/nexo/persona.ts`, `instructions.
 | `search-help-center` | buscou na central de ajuda | payload `articles` (2) |
 | `list-my-tickets` | consultou seus chamados | payload `tickets` + opções (até 4 chamados; "Falar com um analista" se há vencido) |
 | `get-my-ticket` | consultou o chamado X | payload `ticket` com updates; opção de analista se vencido |
-| `start-open-ticket-flow` | iniciou a abertura de chamado | pré-preenche título/descrição/tipo/categoria; `forceNew` ignora duplicidade |
+| `start-open-ticket-flow` | iniciou a abertura de chamado | pré-preenche título/descrição/tipo/categoria; `forceNew` ignora duplicidade; `relatedTicketId` = chamado que o agent julga ser o mesmo problema (pega paráfrases), conferido pelo flow |
 | `add-ticket-update` | preparou complemento do chamado X | `requiresConfirmation` → rascunho `update-ticket` |
 | `reopen-ticket` | preparou reabertura do chamado X | `requiresConfirmation`; só resolvidos ≤ 7 dias |
 | `transfer-to-analyst` | transferiu para um analista | `afterEffects` transfer com motivo e resumo |

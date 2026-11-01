@@ -10,7 +10,7 @@ import { isOpenStatus, TICKET_CATEGORIES } from "@/services/tickets/types";
 import { currentUserId } from "./context";
 import { OPEN_TICKET_FLOW, TYPE_LABEL, type TicketDraft } from "../flows/openTicket";
 
-type StartInput = { title?: string; description?: string; type?: "INC" | "REQ"; category?: (typeof TICKET_CATEGORIES)[number]; forceNew?: boolean };
+type StartInput = { title?: string; description?: string; type?: "INC" | "REQ"; category?: (typeof TICKET_CATEGORIES)[number]; forceNew?: boolean; relatedTicketId?: string };
 
 export const startOpenTicketFlow: ToolSpec<StartInput, StartFlowOutput> = {
   label: "iniciou a abertura de chamado",
@@ -23,9 +23,13 @@ export const startOpenTicketFlow: ToolSpec<StartInput, StartFlowOutput> = {
       type: z.enum(["INC", "REQ"]).optional().describe("INC: algo parou/não funciona; REQ: pedido de acesso, equipamento ou software"),
       category: z.enum(TICKET_CATEGORIES).optional(),
       forceNew: z.boolean().optional().describe("true quando o funcionário quer um chamado novo apesar de existir um parecido"),
+      relatedTicketId: z.string().optional().describe(
+        "Id de um chamado do funcionário (aberto, ou resolvido há até 7 dias) que trata do MESMO problema, mesmo descrito com outras palavras (ex.: 'PC demorando depois do update' = 'Notebook lento após atualização do Windows'). Consulte list-my-tickets antes. O sistema confere se o chamado é dele; na dúvida, não preencha.",
+      ),
     }),
     execute: async (input) => {
       const data: Record<string, string> = {};
+      if (input.relatedTicketId) data.related_hint = input.relatedTicketId.trim().toUpperCase();
       if (input.title) data.title = input.title;
       if (input.description) data.description = input.description;
       if (input.type) data.type = input.type;
@@ -34,9 +38,10 @@ export const startOpenTicketFlow: ToolSpec<StartInput, StartFlowOutput> = {
       return { startFlow: { flowId: OPEN_TICKET_FLOW, data } };
     },
   }),
-  summarize: (_i, out) => {
-    const keys = Object.keys(out.startFlow.data).filter((k) => k !== "force_new");
-    return keys.length ? `pré-preenchido: ${keys.join(", ")}` : "sem pré-preenchimento";
+  summarize: (i, out) => {
+    const keys = Object.keys(out.startFlow.data).filter((k) => k !== "force_new" && k !== "related_hint");
+    const base = keys.length ? `pré-preenchido: ${keys.join(", ")}` : "sem pré-preenchimento";
+    return i.relatedTicketId ? `${base}; indicou ${i.relatedTicketId.toUpperCase()} como o mesmo problema` : base;
   },
 };
 

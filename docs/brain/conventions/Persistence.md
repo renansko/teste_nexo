@@ -7,4 +7,5 @@ Todo estado vive em SQLite (`node:sqlite`, `NEXO_DB_PATH`, padrão `./data/nexo.
 - Sem cache em memória: conversas, chamados, flow e rascunho sobrevivem a reinício por construção (testes fecham e reabrem o banco).
 - `boot()` (rotas) = abrir banco + seed idempotente da persona; `npm run seed` faz o mesmo fora do servidor.
 - Testes usam um arquivo temporário por processo (`src/test/helpers.ts`); `node --test` isola cada arquivo de teste num processo.
-- `node:sqlite` exige Node 22.5+ (testado em 24). `transaction(fn)` para escritas compostas.
+- `node:sqlite` exige Node 22.5+ (testado em 24). `transaction(fn)` para escritas compostas, com `BEGIN IMMEDIATE`: "ler, decidir, gravar" fica serializado entre processos.
+- Migração 2: `idempotency_key` (unique parcial) em `tickets`/`ticket_updates` e tabela `action_queue` ([ActionQueue](../services/ActionQueue.md)).
