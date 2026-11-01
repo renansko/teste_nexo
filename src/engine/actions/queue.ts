@@ -1,7 +1,7 @@
 /**
- * Fila de ações confirmadas que não puderam rodar porque o sistema externo estava indisponível (erro 503).
- * O funcionário já confirmou: a ação é registrada assim que o sistema voltar, e o resultado vira mensagem na conversa.
- * A chave da fila é o id do rascunho, a mesma chave de idempotência passada ao executor: reprocessar nunca grava duas vezes.
+ * Outbox de ações confirmadas. Toda confirmação grava aqui, na mesma transação que tira o rascunho da conversa,
+ * e só depois executa. Se o processo cair no meio ou o sistema de chamados estiver fora (503), o worker reexecuta.
+ * A chave é o id do rascunho, a mesma chave de idempotência passada ao executor: reprocessar nunca grava duas vezes.
  * @wiki docs/brain/services/ActionQueue.md
  */
 import { getDb } from "@/lib/db";
@@ -46,16 +46,31 @@ const toItem = (r: Row): QueuedAction => ({
   status: r.status, attempts: r.attempts, nextAttemptAt: r.next_attempt_at, lastError: r.last_error,
 });
 
-/** Enfileira (idempotente: a mesma ação nunca entra duas vezes). A primeira tentativa já conta, por isso attempts = 1. */
-export function enqueueAction(p: { conversationId: string; userId: string; pending: PendingAction; error: string; now: Date }): QueuedAction {
-  const pending = withActionId(p.pending);
+/** Item em `processing` há mais que isso é de um processo que caiu: volta para a fila. */
+export const STALE_PROCESSING_MS = 2 * 60_000;
+
+/**
+ * Registra a ação confirmada já reivindicada para execução imediata (`processing`, 1ª tentativa).
+ * Chamar dentro da mesma transação que tira o rascunho da conversa. Devolve false se a ação já estava registrada
+ * (confirmação repetida em paralelo): quem chamou não deve executar de novo.
+ */
+export function recordConfirmedAction(p: { conversationId: string; userId: string; pending: PendingAction & { id: string }; now: Date }): boolean {
   const iso = p.now.toISOString();
-  getDb().prepare(
+  const r = getDb().prepare(
     `INSERT OR IGNORE INTO action_queue (id, conversation_id, user_id, kind, label, input, status, attempts, next_attempt_at, last_error, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,'queued',1,?,?,?,?)`,
-  ).run(pending.id, p.conversationId, p.userId, pending.kind, pending.label, JSON.stringify(pending.input),
-    new Date(p.now.getTime() + queueBackoffMs(1)).toISOString(), p.error, iso, iso);
-  return getQueuedAction(pending.id)!;
+     VALUES (?,?,?,?,?,?,'processing',1,?,NULL,?,?)`,
+  ).run(p.pending.id, p.conversationId, p.userId, p.pending.kind, p.pending.label, JSON.stringify(p.pending.input), iso, iso, iso);
+  return Number(r.changes) === 1;
+}
+
+export const markActionDone = (id: string, now: Date) => setStatus(id, "done", now);
+export const markActionFailed = (id: string, now: Date, error: string) => setStatus(id, "failed", now, { error });
+
+/** Indisponível: volta para a fila com espera crescente pela quantidade de tentativas. */
+export function rescheduleAction(id: string, now: Date, error: string): QueuedAction {
+  const attempts = getQueuedAction(id)?.attempts ?? 1;
+  setStatus(id, "queued", now, { nextAttemptAt: new Date(now.getTime() + queueBackoffMs(attempts)), error });
+  return getQueuedAction(id)!;
 }
 
 export function getQueuedAction(id: string): QueuedAction | undefined {
@@ -90,7 +105,10 @@ export interface QueueRunResult { done: number; retried: number; failed: number 
 export async function processActionQueue(opts: { now?: () => Date; limit?: number } = {}): Promise<QueueRunResult> {
   const clock = opts.now ?? (() => new Date());
   const out: QueueRunResult = { done: 0, retried: 0, failed: 0 };
-  const due = getDb().prepare(`SELECT * FROM action_queue WHERE status = 'queued' AND next_attempt_at <= ? ORDER BY next_attempt_at LIMIT ?`)
+  // Recuperação: confirmado e reivindicado, mas o processo caiu antes de concluir.
+  getDb().prepare(`UPDATE action_queue SET status = 'queued', next_attempt_at = updated_at WHERE status = 'processing' AND updated_at < ?`)
+    .run(new Date(clock().getTime() - STALE_PROCESSING_MS).toISOString());
+  const due =getDb().prepare(`SELECT * FROM action_queue WHERE status = 'queued' AND next_attempt_at <= ? ORDER BY next_attempt_at LIMIT ?`)
     .all(clock().toISOString(), opts.limit ?? 20) as unknown as Row[];
 
   for (const row of due) {
@@ -142,7 +160,9 @@ function deliver(item: QueuedAction, result: ActionResult, now: Date, started: n
     }
   }
   const trace: Trace = { source: "action", actions: result.trace?.actions ?? [], decision: result.trace?.decision, durationMs: Date.now() - started, notes };
-  addMessage(conv.id, { role: "agent", content: `O sistema de chamados voltou. ${result.text}`, payload, trace }, now);
+  // lastError preenchido = esperou por indisponibilidade; vazio = retomado após queda do processo.
+  const prefix = item.lastError ? "O sistema de chamados voltou." : "Concluí o pedido que você confirmou.";
+  addMessage(conv.id, { role: "agent", content: `${prefix} ${result.text}`, payload, trace }, now);
   applyAfterEffects(conv.id, result.afterEffects ?? [], now);
 }
 
@@ -164,10 +184,9 @@ function notifyFailure(item: QueuedAction, e: unknown, now: Date): void {
 let timer: ReturnType<typeof setInterval> | undefined;
 let running = false;
 
-/** Inicia o worker (idempotente). Itens presos em 'processing' (processo caiu no meio) voltam para a fila: a idempotência torna isso seguro. */
+/** Inicia o worker (idempotente). A recuperação de itens de processos que caíram é feita em cada ciclo (STALE_PROCESSING_MS). */
 export function startActionQueueWorker(intervalMs = 5_000): void {
   if (timer) return;
-  getDb().prepare(`UPDATE action_queue SET status = 'queued' WHERE status = 'processing'`).run();
   timer = setInterval(() => {
     if (running) return;
     running = true;

@@ -19,7 +19,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [FlowEngine](services/FlowEngine.md) — Chat-formulário determinístico (flow de abertura de chamado).
 - [PendingAction](services/PendingAction.md) — Rascunho e confirmação obrigatória antes de efeitos.
 - [TicketService](services/TicketService.md) — Sistema de chamados simulado e gateway legado.
-- [ActionQueue](services/ActionQueue.md) — Fila de ações confirmadas durante indisponibilidade; idempotência e reprocessamento.
+- [ActionQueue](services/ActionQueue.md) — Outbox de ações confirmadas: registro atômico, retomada após queda, fila durante indisponibilidade.
 
 ## Funções
 
@@ -50,7 +50,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - `signSession`, `requireSession` → [AuthSession](conventions/AuthSession.md)
 - `priorityFor`, `computeDueAt`, `findRelated` → [ServiceDeskRules](conventions/ServiceDeskRules.md)
 - `legacyGateway`, `withRetry` → [LegacyOutage](conventions/LegacyOutage.md)
-- `enqueueAction`, `processActionQueue`, `startActionQueueWorker`, `withActionId` → [ActionQueue](services/ActionQueue.md)
+- `recordConfirmedAction`, `processActionQueue`, `startActionQueueWorker`, `withActionId` → [ActionQueue](services/ActionQueue.md)
 - `nexoAssistant`, `openTicketFlow`, `nexoActions` → [NexoAssistant](services/NexoAssistant.md)
 - `api`, `analystApi`, `streamMessage`, `SessionProvider`, `ChatScreen`, `AnalystConsole` → [FrontendUI](conventions/FrontendUI.md)
 - `DecisionDetails`, `LOW_CONFIDENCE_REASON` → [DecisionTrace](entities/DecisionTrace.md)

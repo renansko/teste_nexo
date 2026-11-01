@@ -14,6 +14,6 @@ Nenhum efeito colateral sem confirmação explícita: tools de escrita e flows p
 
 - Tools com `requiresConfirmation` devolvem a `PendingAction` e o modelo recebe `{ status: "awaiting_confirmation", draft }`; nada é gravado.
 - O executor roda sem LLM (`source: action` no trace) e devolve texto, payload, `afterEffects` (`link-ticket`, `transfer`) e, opcionalmente, um novo `pendingAction` (ex.: criação recusada por duplicado → rascunho de complemento, nova confirmação).
-- Falha temporária (503) após retries → [ActionQueue](ActionQueue.md); o rascunho sai da conversa. Outra falha **mantém** o rascunho e responde com as mesmas opções.
+- Confirmar segue o padrão outbox ([ActionQueue](ActionQueue.md)): tirar o rascunho e registrar a ação são atômicos; a execução vem depois. Falha temporária (503) → fica na fila; erro de regra → o rascunho volta com nova chave e as mesmas opções.
 - Um novo rascunho substitui o anterior; `take`/`close` do analista descartam.
 - `edit:<key>` exige `input.flow`; sem ele, a opção cai no agent.

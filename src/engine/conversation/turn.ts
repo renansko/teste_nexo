@@ -16,7 +16,8 @@ import { agentError, createMastraRunner } from "../agent/mastraRunner";
 import { newCollector, wrapTools, type TurnCollector } from "../tools/wrap";
 import { advanceFlow, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
 import { interpretPendingInput, pendingParts, withActionId } from "../actions/pending";
-import { enqueueAction, isTemporarilyUnavailable } from "../actions/queue";
+import { isTemporarilyUnavailable, markActionDone, markActionFailed, recordConfirmedAction, rescheduleAction } from "../actions/queue";
+import { transaction } from "@/lib/db";
 import { ANALYST_OPTION, applyAfterEffects } from "./effects";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
@@ -182,14 +183,28 @@ class TurnHelpers {
     void ctx;
   }
 
+  /**
+   * Executa uma ação confirmada pelo padrão outbox: tirar o rascunho da conversa e registrar a ação em `action_queue`
+   * acontecem na MESMA transação; só depois o executor roda. Se o processo cair no meio, o worker retoma o item;
+   * se o sistema estiver fora (503), o item fica na fila. A chave de idempotência evita gravação dupla em qualquer caso.
+   */
   async executePending(draft: PendingAction, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
     const started = Date.now();
     const pending = withActionId(draft); // rascunhos antigos (sem id) ganham um agora
     const executor = this.config.actions[pending.kind];
     if (!executor) throw new AppError("ACTION_UNKNOWN", `Ação '${pending.kind}' não registrada`, 500);
-    updateConversation(this.conversationId, { pendingAction: null }, this.now);
+    const claimed = transaction(() => {
+      updateConversation(this.conversationId, { pendingAction: null }, this.now);
+      return recordConfirmedAction({ conversationId: this.conversationId, userId: ctx.userId, pending, now: this.now });
+    });
+    if (!claimed) {
+      // Confirmação repetida em paralelo: a outra requisição já registrou e executa esta ação.
+      this.reply("Esse pedido já foi confirmado e está sendo processado.", [], { source: "rule", notes: [`${pending.kind}: confirmação repetida (${pending.id})`] }, started);
+      return;
+    }
     try {
       const result = await executor(pending.input, { ...ctx, idempotencyKey: pending.id });
+      markActionDone(pending.id, new Date());
       let payload: Payload = result.payload ?? [];
       if (result.pendingAction) {
         // O executor trocou a ação (ex.: surgiu um chamado parecido): novo rascunho, nova confirmação.
@@ -202,24 +217,26 @@ class TurnHelpers {
     } catch (e) {
       const code = e instanceof AppError ? e.code : "ERROR";
       if (isTemporarilyUnavailable(e)) {
-        // Já confirmado pelo funcionário: vai para a fila e é registrado quando o sistema voltar (mesma chave → sem duplicar).
-        const queued = enqueueAction({ conversationId: this.conversationId, userId: ctx.userId, pending, error: code, now: this.now });
+        // Já confirmado: continua no outbox e é registrado quando o sistema voltar (mesma chave → sem duplicar).
+        rescheduleAction(pending.id, new Date(), code);
         this.reply(
           "O sistema de chamados está fora do ar agora. Seu pedido já está confirmado e ficou na fila: vou registrá-lo assim que o sistema voltar e aviso você aqui nesta conversa.",
           [],
           {
             source: "action",
             actions: [{ id: "queue", tool: pending.kind, label: `${pending.label}: na fila`, status: "done", summary: "aguardando o sistema de chamados voltar" }],
-            notes: [`${pending.kind}: ${code}; enfileirado (${queued.id})`],
+            notes: [`${pending.kind}: ${code}; na fila (${pending.id})`],
           },
           started,
         );
         return;
       }
-      // Outra falha: mantém o rascunho para o funcionário tentar de novo.
-      updateConversation(this.conversationId, { pendingAction: pending }, this.now);
+      // Falha de regra (ex.: chamado não está mais aberto): nada foi gravado; devolve o rascunho com nova chave.
+      markActionFailed(pending.id, new Date(), code);
+      const retry = withActionId({ ...pending, id: undefined });
+      updateConversation(this.conversationId, { pendingAction: retry }, this.now);
       const text = `Não consegui concluir: ${e instanceof Error ? e.message : String(e)}. O rascunho continua salvo.`;
-      this.reply(text, pendingParts(pending), {
+      this.reply(text, pendingParts(retry), {
         source: "action",
         actions: [{ id: "exec", tool: pending.kind, label: pending.label, status: "error", summary: code }],
         notes: [`${pending.kind}: ${code}`],
