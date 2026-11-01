@@ -73,8 +73,14 @@ export function requireSession(req: Request, opts: { role?: EmployeeRole } = {})
   return s;
 }
 
-export function sessionCookie(token: string | null, maxAgeS = DEFAULT_TTL_S): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+/** `Secure` só quando a requisição chegou por HTTPS (direto ou via proxy); em http://localhost o navegador descartaria o cookie. */
+export function isSecureRequest(req: Request): boolean {
+  return new URL(req.url).protocol === "https:" || req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() === "https";
+}
+
+export function sessionCookie(token: string | null, opts: { secure?: boolean; maxAgeS?: number } = {}): string {
+  const maxAgeS = opts.maxAgeS ?? DEFAULT_TTL_S;
+  const secure = opts.secure ? "; Secure" : "";
   if (token === null) return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
   return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeS}${secure}`;
 }

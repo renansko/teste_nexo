@@ -19,6 +19,9 @@ test("login com e-mail corporativo e qualquer senha; cookie e bearer", async () 
   assert.equal(r.status, 200);
   assert.equal(r.json.user.name, "Ana Souza");
   assert.match(r.res.headers.get("set-cookie") ?? "", /nexo_session=.*HttpOnly/);
+  assert.doesNotMatch(r.res.headers.get("set-cookie") ?? "", /Secure/); // http://localhost
+  const https = await call(login, { url: "https://nexo.example/api", body: { email: "ana.souza@nexo.com", password: "x" } });
+  assert.match(https.res.headers.get("set-cookie") ?? "", /Secure/);
   const m = await call(me, { headers: { cookie: `nexo_session=${encodeURIComponent(r.json.token)}` } });
   assert.equal(m.json.user.id, "emp-ana");
   const bad = await call(login, { body: { email: "ninguem@nexo.com", password: "x" } });
@@ -48,6 +51,9 @@ test("conversas: criar, listar as minhas, ler e paginar mensagens; não vejo con
   assert.equal(other.status, 404);
   const analyst = await call(getConv, { headers: as("an-fabio", "analyst"), params: { id: c.json.id } });
   assert.equal(analyst.status, 200);
+
+  assert.equal((await call(createConv, { headers: as("emp-ana"), method: "POST", rawBody: "" })).status, 201); // corpo vazio (como o Next entrega)
+  assert.equal((await call(createConv, { headers: as("emp-ana"), body: { assistantId: "x" } })).status, 404);
 });
 
 test("chamados e central de ajuda respeitam sessão e privacidade", async () => {

@@ -11,10 +11,10 @@ export function as(userId: string, role: EmployeeRole = "employee"): Record<stri
 
 export async function call(
   handler: Handler,
-  opts: { method?: string; url?: string; body?: unknown; headers?: Record<string, string>; params?: Record<string, string> } = {},
+  opts: { method?: string; url?: string; body?: unknown; rawBody?: string; headers?: Record<string, string>; params?: Record<string, string> } = {},
 ): Promise<{ status: number; json: any; res: Response }> {
   const headers: Record<string, string> = { ...(opts.headers ?? {}) };
-  let body: string | undefined;
+  let body: string | undefined = opts.rawBody;
   if (opts.body !== undefined) {
     headers["content-type"] = "application/json";
     body = JSON.stringify(opts.body);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { parseBody, route } from "@/lib/http";
 import { AppError } from "@/lib/errors";
 import { findEmployeeByEmail } from "@/services/employees/employeeService";
-import { sessionCookie, signSession } from "@/engine/auth/token";
+import { isSecureRequest, sessionCookie, signSession } from "@/engine/auth/token";
 
 export const runtime = "nodejs";
 
@@ -14,5 +14,5 @@ export const POST = route(async (req) => {
   const user = findEmployeeByEmail(email);
   if (!user) throw new AppError("INVALID_CREDENTIALS", "E-mail não encontrado", 401);
   const token = signSession({ sub: user.id, role: user.role });
-  return Response.json({ token, user }, { headers: { "Set-Cookie": sessionCookie(token) } });
+  return Response.json({ token, user }, { headers: { "Set-Cookie": sessionCookie(token, { secure: isSecureRequest(req) }) } });
 });

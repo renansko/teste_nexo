@@ -3,8 +3,19 @@ import type { ZodType } from "zod";
 import { AppError } from "./errors";
 import { boot } from "./bootstrap";
 
+/** Lê e valida o corpo JSON. Corpo vazio vira `{}` (útil para POSTs sem parâmetros). */
 export async function parseBody<T>(req: Request, schema: ZodType<T>): Promise<T> {
-  const raw = await req.json().catch(() => null);
+  const text = await req.text().catch(() => "");
+  let raw: unknown = {};
+  if (text.trim()) {
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      throw new AppError("INVALID_BODY", "JSON inválido", 400);
+    }
+    // Sem content-length o Next entrega "null" para POST sem corpo; trate como vazio.
+    if (raw === null) raw = {};
+  }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) throw new AppError("INVALID_BODY", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), 400);
   return parsed.data;

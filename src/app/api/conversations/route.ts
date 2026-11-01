@@ -14,11 +14,11 @@ export const GET = route(async (req) => {
   return Response.json(items);
 });
 
-const body = z.object({ assistantId: z.string().optional() }).default({});
+const body = z.object({ assistantId: z.string().optional() });
 
 export const POST = route(async (req) => {
   const { user } = requireSession(req);
-  const { assistantId } = req.headers.get("content-length") === "0" || !req.body ? { assistantId: undefined } : await parseBody(req, body);
+  const { assistantId } = await parseBody(req, body);
   const assistant = getAssistant(assistantId ?? "nexo");
   const conv = createConversation({ assistantId: assistant.id, employeeId: user.id });
   return Response.json(publicConversation(conv), { status: 201 });

@@ -1,6 +1,6 @@
 import { route } from "@/lib/http";
-import { sessionCookie } from "@/engine/auth/token";
+import { isSecureRequest, sessionCookie } from "@/engine/auth/token";
 
 export const runtime = "nodejs";
 
-export const POST = route(async () => Response.json({ ok: true }, { headers: { "Set-Cookie": sessionCookie(null) } }));
+export const POST = route(async (req) => Response.json({ ok: true }, { headers: { "Set-Cookie": sessionCookie(null, { secure: isSecureRequest(req) }) } }));
