@@ -7,6 +7,9 @@ import { NEXO_INSTRUCTIONS } from "./instructions";
 import { searchHelpCenter } from "./tools/helpCenter";
 import { getMyTicket, listMyTickets } from "./tools/tickets";
 import { transferToAnalyst } from "./tools/transfer";
+import { addTicketUpdate, reopenTicket, startOpenTicketFlow } from "./tools/ticketActions";
+import { openTicketFlow } from "./flows/openTicket";
+import { nexoActions } from "./actions";
 
 export const nexoAssistant: AssistantConfig = {
   id: "nexo",
@@ -14,9 +17,9 @@ export const nexoAssistant: AssistantConfig = {
   model: process.env.NEXO_MODEL ?? "claude-sonnet-5-5",
   fastModel: process.env.NEXO_FAST_MODEL ?? "claude-haiku-5-5",
   instructions: NEXO_INSTRUCTIONS,
-  tools: { searchHelpCenter, listMyTickets, getMyTicket, transferToAnalyst },
-  flows: {},
-  actions: {},
+  tools: { searchHelpCenter, listMyTickets, getMyTicket, transferToAnalyst, startOpenTicketFlow, addTicketUpdate, reopenTicket },
+  flows: { [openTicketFlow.id]: openTicketFlow },
+  actions: nexoActions,
   limits: {
     maxUserMessages: Number(process.env.NEXO_MESSAGE_LIMIT ?? "30"),
     maxSteps: 6,

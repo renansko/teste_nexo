@@ -105,7 +105,7 @@ export interface PendingAction {
   /** Dados necessários para executar; ficam persistidos. */
   input: Record<string, unknown>;
   /** Rascunho legível (o cliente renderiza; o engine não interpreta). */
-  draft: Record<string, unknown>;
+  draft: object;
   /** Rótulo humano para o trace: "criar chamado". */
   label: string;
   /** Opções além de confirmar/cancelar (ex.: editar um campo → volta ao flow). */
