@@ -1,0 +1,18 @@
+# Uso: crie um `.env` a partir do `.env.example` (ANTHROPIC_API_KEY e NEXO_AUTH_SECRET) e rode `docker compose up --build`.
+# App em http://localhost:3000 (ou NEXO_PORT). Abra por "localhost": o cookie de sessão é Secure em produção.
+services:
+  app:
+    build: .
+    ports:
+      - "${NEXO_PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NEXO_DB_PATH: /app/data/nexo.db
+    volumes:
+      - nexo-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  nexo-data:
