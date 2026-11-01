@@ -69,15 +69,24 @@ export interface TicketUpdate {
   createdAt: string;
 }
 export interface DraftTicket {
+  /** create = chamado novo; update = complemento num aberto; reopen = reabrir resolvido. */
+  mode: "create" | "update" | "reopen";
   title: string;
   description: string;
   type: "INC" | "REQ";
+  typeLabel: string;
   category: string;
   priority: TicketPriority;
   priorityLabel: string;
-  dueLabel: string;
+  priorityReason: string;
+  slaLabel: string;
+  dueAt: string;
   affected: string;
-  related?: TicketView[];
+  /** Chamado alvo quando mode é update/reopen. */
+  ticket?: TicketView;
+  /** Complemento (update) ou motivo (reopen). */
+  text?: string;
+  related: TicketView[];
 }
 export interface Option {
   id: string;

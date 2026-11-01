@@ -88,30 +88,44 @@ function optionStyle(id: string): string | undefined {
   return styles.btnSecondary;
 }
 
+const DRAFT_KIND: Record<DraftTicket["mode"], string> = {
+  create: "Novo chamado",
+  update: "Atualizar chamado",
+  reopen: "Reabrir chamado",
+};
+
+function dueTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 function DraftCard({ draft, options, interactive, onOption }: { draft: DraftTicket; options: Option[] } & PayloadHandlers) {
+  const sameDay = new Date(draft.dueAt).toDateString() === new Date().toDateString();
+  const due = sameDay ? `resposta até ${dueTime(draft.dueAt)}` : `resposta até ${formatDateTime(draft.dueAt)}`;
   return (
     <article className={styles.card} aria-label="Rascunho do chamado">
       <div className={styles.body}>
         <Eyebrow
-          kind={draft.related?.length ? "Atualizar chamado" : "Novo chamado"}
-          id={`Rascunho · ${draft.type}`}
+          kind={DRAFT_KIND[draft.mode]}
+          id={draft.ticket ? draft.ticket.id : `Rascunho · ${draft.typeLabel}`}
           dot="var(--warning)"
           label={interactive ? "Aguardando confirmação" : "Rascunho"}
           labelColor="var(--warning-text)"
         />
         <h3 className={styles.title}>{draft.title}</h3>
-        <p className={styles.description}>{draft.description}</p>
+        <p className={styles.description}>{draft.text ?? draft.description}</p>
       </div>
       <div className={styles.fields}>
         <Field label="Categoria">{draft.category}</Field>
         <Field label="Prioridade">
           <Dot color={PRIORITY_DOT[draft.priority]} />
           {draft.priorityLabel}
-          {draft.dueLabel && <span className={styles.muted}>· {draft.dueLabel}</span>}
+          <span className={styles.muted}>· {due}</span>
         </Field>
         <Field label="Afetados">{draft.affected}</Field>
       </div>
-      {draft.related && draft.related.length > 0 && (
+      {draft.priorityReason && <p className={styles.related}>{draft.priorityReason}</p>}
+      {draft.related.length > 0 && (
         <p className={styles.related}>
           Relacionado: {draft.related.map((t) => `${t.id} · ${t.title}`).join(", ")}
         </p>
