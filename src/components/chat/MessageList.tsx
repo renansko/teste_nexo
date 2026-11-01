@@ -1,0 +1,113 @@
+"use client";
+import { useEffect, useRef } from "react";
+import { Check, LoaderCircle, X } from "lucide-react";
+import type { ChatMessage, Option, TicketView, TraceAction } from "@/lib/api";
+import { looseOptions, OptionChips, PayloadCards } from "./payload/Payload";
+import styles from "./Chat.module.css";
+
+const AUTHOR = { agent: "Nexo Assist", analyst: "Analista" } as const;
+
+interface Props {
+  messages: ChatMessage[];
+  /** Turno do agent em andamento (SSE): ações e texto parciais. */
+  streaming?: { actions: TraceAction[]; text: string } | null;
+  /** A última mensagem do agent aceita clique em opções/chamados. */
+  interactive: boolean;
+  onOption: (option: Option) => void;
+  onPickTicket: (ticket: TicketView) => void;
+}
+
+/** Lista de mensagens do chat do funcionário. */
+export function MessageList({ messages, streaming, interactive, onOption, onPickTicket }: Props) {
+  const endRef = useRef<HTMLDivElement>(null);
+  const streamLen = (streaming?.text.length ?? 0) + (streaming?.actions.length ?? 0);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length, streamLen]);
+
+  const lastAgentId = [...messages].reverse().find((m) => m.role === "agent")?.id;
+  const lastId = messages.at(-1)?.id;
+
+  return (
+    <div className={styles.scroll} aria-live="polite">
+      <div className={styles.messages}>
+        {messages.length === 0 && !streaming && (
+          <div className={styles.empty}>
+            <h2>Como podemos ajudar?</h2>
+            <p>Descreva o problema de TI. O assistente consulta seus chamados, busca na central de ajuda e chama um analista quando precisa.</p>
+          </div>
+        )}
+        {messages.map((m) => {
+          if (m.role === "user")
+            return (
+              <div key={m.id} className={styles.userRow}>
+                <div className={styles.userBubble}>{m.content}</div>
+              </div>
+            );
+          if (m.role === "system")
+            return (
+              <p key={m.id} className={styles.system}>
+                {m.content}
+              </p>
+            );
+          const parts = m.payload ?? [];
+          const live = interactive && m.id === lastAgentId && m.id === lastId;
+          const handlers = { interactive: live, onOption, onPickTicket };
+          const chips = looseOptions(parts);
+          return (
+            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions}>
+              {(m.content || chips) && (
+                <div className={styles.agentBubble}>
+                  {m.content && <div className={styles.text}>{m.content}</div>}
+                  {chips && <OptionChips options={chips} {...handlers} />}
+                </div>
+              )}
+              <PayloadCards parts={parts} {...handlers} />
+            </AgentMessage>
+          );
+        })}
+        {streaming && (
+          <AgentMessage who="Nexo Assist" actions={streaming.actions}>
+            <div className={styles.agentBubble}>
+              {streaming.text ? (
+                <div className={styles.text}>{streaming.text}</div>
+              ) : (
+                <span className={styles.typing} aria-label="Nexo Assist está escrevendo">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              )}
+            </div>
+          </AgentMessage>
+        )}
+        <div ref={endRef} />
+      </div>
+    </div>
+  );
+}
+
+function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAction[]; children: React.ReactNode }) {
+  return (
+    <div className={styles.agentRow}>
+      <div className={styles.statusLine}>
+        <span className={styles.who} data-analyst={props.analyst}>
+          {props.who}
+        </span>
+        {props.actions?.map((a) => (
+          <span key={a.id} className={styles.step} data-status={a.status} title={a.summary}>
+            {a.status === "pending" ? (
+              <LoaderCircle size={12} className={styles.spin} aria-hidden />
+            ) : a.status === "error" ? (
+              <X size={12} aria-hidden />
+            ) : (
+              <Check size={12} aria-hidden />
+            )}
+            {a.label}
+          </span>
+        ))}
+      </div>
+      {props.children}
+    </div>
+  );
+}

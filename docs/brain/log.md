@@ -7,3 +7,4 @@
 - 2026-11-01 | etapa 4 | FlowEngine e PendingAction; flow de abertura de chamado, duplicidade e reabertura.
 - 2026-11-01 | etapa 5 | AnalystConsoleApi: take/reply/return/close e painel de chamados.
 - 2026-11-01 | etapa 6 | README, páginas do Brain reescritas; SupportAgent → NexoAssistant, HandleMessage → Turn.
+- 2026-11-01 | front | FrontendUI: login, chat do funcionário (SSE + cards) e perfil sobre o contrato v1.

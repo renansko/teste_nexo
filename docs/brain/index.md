@@ -33,6 +33,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [AuthSession](conventions/AuthSession.md) — Token HMAC, cookie e Bearer, roles.
 - [LegacyOutage](conventions/LegacyOutage.md) — Indisponibilidade simulada e retry.
 - [Persistence](conventions/Persistence.md) — SQLite, migrações, JSON em colunas.
+- [FrontendUI](conventions/FrontendUI.md) — Rotas do front, sessão, SSE/polling e regras de interação dos cards.
 
 ## Produto
 
@@ -49,3 +50,4 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - `priorityFor`, `computeDueAt`, `findRelated` → [ServiceDeskRules](conventions/ServiceDeskRules.md)
 - `legacyGateway`, `withRetry` → [LegacyOutage](conventions/LegacyOutage.md)
 - `nexoAssistant`, `openTicketFlow`, `nexoActions` → [NexoAssistant](services/NexoAssistant.md)
+- `api`, `streamMessage`, `SessionProvider`, `ChatScreen` → [FrontendUI](conventions/FrontendUI.md)

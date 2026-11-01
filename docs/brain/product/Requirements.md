@@ -19,6 +19,5 @@ Regras do service desk: [ServiceDeskRules](../conventions/ServiceDeskRules.md). 
 
 ## Pendências
 
-- Link do protótipo Pencil (Anexo C) não extraível do PDF escaneado; payloads foram desenhados pela descrição das telas. Ajustar quando o link for fornecido.
+- Anexo C (protótipo Pencil `nexo.pen`) recebido pelo front; telas do funcionário implementadas, console do analista pendente no front ([FrontendUI](../conventions/FrontendUI.md)). A API do console já existe ([AnalystConsoleApi](../functions/AnalystConsoleApi.md)).
 - Deploy (diferencial) não feito.
-- Front em desenvolvimento em branch separada; `src/app/page.tsx` e `layout.tsx` pertencem ao front.

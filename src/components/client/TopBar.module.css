@@ -1,0 +1,26 @@
+.bar {
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.crumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.root,
+.sep {
+  color: var(--ink-3);
+}
+
+.here {
+  font-weight: 600;
+}

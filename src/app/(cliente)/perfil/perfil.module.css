@@ -1,0 +1,148 @@
+.page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 48px 40px;
+}
+
+.content {
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--ink-3);
+}
+
+.card {
+  border: 1px solid var(--card-line);
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--rule);
+}
+
+.key {
+  width: 160px;
+  flex-shrink: 0;
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.passwordRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.iconWrap {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--desk);
+  color: var(--ink-2);
+}
+
+.passwordText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.passwordText strong {
+  font-weight: 600;
+}
+
+.passwordText span {
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+
+.secondary {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: var(--shadow-control);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.helper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--rule);
+  background: var(--desk);
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 32px 16px;
+  }
+
+  .row {
+    flex-wrap: wrap;
+    gap: 6px 16px;
+  }
+
+  .key {
+    width: 100%;
+  }
+}
