@@ -25,3 +25,14 @@ test("resolve sessão por Bearer e por cookie; exige role", () => {
   const analyst = signSession({ sub: "an-fabio", role: "analyst" });
   assert.equal(requireSession(new Request("http://x/api", { headers: { authorization: `Bearer ${analyst}` } }), { role: "analyst" }).user.role, "analyst");
 });
+
+test("produção sem NEXO_AUTH_SECRET não assina com o segredo de desenvolvimento", () => {
+  const prev = { NODE_ENV: process.env.NODE_ENV, NEXO_AUTH_SECRET: process.env.NEXO_AUTH_SECRET };
+  Object.assign(process.env, { NODE_ENV: "production" });
+  delete process.env.NEXO_AUTH_SECRET;
+  try {
+    assert.throws(() => signSession({ sub: "emp-ana", role: "employee" }), /NEXO_AUTH_SECRET/);
+  } finally {
+    for (const [k, v] of Object.entries(prev)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+});

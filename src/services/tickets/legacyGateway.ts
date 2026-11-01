@@ -4,6 +4,7 @@
  * @wiki docs/brain/conventions/LegacyOutage.md
  */
 import { AppError } from "@/lib/errors";
+import { env } from "@/lib/env";
 
 export interface OutageConfig {
   /** Probabilidade (0–1) de uma chamada iniciar uma janela de indisponibilidade. */
@@ -23,8 +24,8 @@ export class LegacyGateway {
 
   constructor(config?: Partial<OutageConfig>) {
     this.config = {
-      rate: Number(process.env.NEXO_TICKETS_OUTAGE_RATE ?? "0.05"),
-      durationMs: Number(process.env.NEXO_TICKETS_OUTAGE_MS ?? "2000"),
+      rate: env().NEXO_TICKETS_OUTAGE_RATE,
+      durationMs: env().NEXO_TICKETS_OUTAGE_MS,
       random: Math.random,
       now: Date.now,
       ...config,

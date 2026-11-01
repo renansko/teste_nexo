@@ -3,6 +3,7 @@
  * @wiki docs/brain/services/NexoAssistant.md
  */
 import type { AssistantConfig } from "@/engine/types";
+import { env } from "@/lib/env";
 import { NEXO_INSTRUCTIONS } from "./instructions";
 import { searchHelpCenter } from "./tools/helpCenter";
 import { getMyTicket, listMyTickets } from "./tools/tickets";
@@ -14,14 +15,14 @@ import { nexoActions } from "./actions";
 export const nexoAssistant: AssistantConfig = {
   id: "nexo",
   name: "Nexo Assist",
-  model: process.env.NEXO_MODEL ?? "claude-sonnet-5-5",
-  fastModel: process.env.NEXO_FAST_MODEL ?? "claude-haiku-5-5",
+  model: env().NEXO_MODEL,
+  fastModel: env().NEXO_FAST_MODEL,
   instructions: NEXO_INSTRUCTIONS,
   tools: { searchHelpCenter, listMyTickets, getMyTicket, transferToAnalyst, startOpenTicketFlow, addTicketUpdate, reopenTicket },
   flows: { [openTicketFlow.id]: openTicketFlow },
   actions: nexoActions,
   limits: {
-    maxUserMessages: Number(process.env.NEXO_MESSAGE_LIMIT ?? "30"),
+    maxUserMessages: env().NEXO_MESSAGE_LIMIT,
     maxSteps: 6,
     historyWindow: 20,
   },

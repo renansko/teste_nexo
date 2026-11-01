@@ -4,6 +4,7 @@
  * @wiki docs/brain/conventions/ServiceDeskRules.md
  */
 import type { TicketPriority } from "./types";
+import { env } from "@/lib/env";
 
 const BUSINESS_START_H = 8;
 const BUSINESS_END_H = 18;
@@ -17,7 +18,7 @@ export const SLA_LABEL: Record<TicketPriority, string> = {
   baixa: "5 dias úteis",
 };
 
-const tzOffsetMs = (): number => Number(process.env.NEXO_BUSINESS_TZ_OFFSET_MINUTES ?? "-180") * MIN;
+const tzOffsetMs = (): number => env().NEXO_BUSINESS_TZ_OFFSET_MINUTES * MIN;
 
 /** Representa o instante como "horário local" num Date cujos campos UTC são os locais. */
 const toLocal = (d: Date): Date => new Date(d.getTime() + tzOffsetMs());

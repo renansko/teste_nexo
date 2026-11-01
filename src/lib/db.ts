@@ -5,6 +5,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { env } from "@/lib/env";
 
 const MIGRATIONS: { version: number; sql: string }[] = [
   {
@@ -102,7 +103,7 @@ let db: DatabaseSync | undefined;
 /** Singleton SQLite (node:sqlite). Aplica as migrações pendentes na primeira abertura. */
 export function getDb(): DatabaseSync {
   if (db) return db;
-  const path = process.env.NEXO_DB_PATH ?? "./data/nexo.db";
+  const path = env().NEXO_DB_PATH;
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const conn = new DatabaseSync(path);
   conn.exec(`PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`);
