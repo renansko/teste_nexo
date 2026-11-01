@@ -81,6 +81,17 @@ test("fluxo completo: transferência → lista → assumir → responder → fun
   assert.equal((await call(giveBack, { headers: fabio(), params: { id: conv.id } })).status, 409);
 });
 
+test("conversa aguardando atendente pode ser devolvida ao agent por qualquer analista, sem assumir", async () => {
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  updateConversation(conv.id, { state: "waiting_analyst", transferReason: "low_confidence", transferSummary: "resumo do caso" });
+  const g = await call(giveBack, { headers: gabi(), params: { id: conv.id } });
+  assert.equal(g.status, 200);
+  assert.equal(g.json.conversation.state, "agent");
+  assert.equal(g.json.conversation.transferReason, null);
+  assert.equal(g.json.conversation.transferSummary, "resumo do caso");
+  assert.equal(g.json.messages[0].role, "system");
+});
+
 test("analista pode assumir conversa que ainda está com o agent (descarta flow/rascunho) e ver chamados de um funcionário", async () => {
   const conv = createConversation({ assistantId: "nexo", employeeId: "emp-bruno" });
   updateConversation(conv.id, { activeFlow: { flowId: "open-ticket", data: {}, stepIndex: 0, startedAt: "" } });

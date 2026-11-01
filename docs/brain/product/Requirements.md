@@ -19,5 +19,5 @@ Regras do service desk: [ServiceDeskRules](../conventions/ServiceDeskRules.md). 
 
 ## Pendências
 
-- Anexo C (protótipo Pencil `nexo.pen`) recebido pelo front; telas do funcionário implementadas, console do analista pendente no front ([FrontendUI](../conventions/FrontendUI.md)). A API do console já existe ([AnalystConsoleApi](../functions/AnalystConsoleApi.md)).
+- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista ([FrontendUI](../conventions/FrontendUI.md), [AnalystConsoleApi](../functions/AnalystConsoleApi.md)). O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: painel expansível nos passos ([DecisionTrace](../entities/DecisionTrace.md)).
 - Deploy (diferencial) não feito.

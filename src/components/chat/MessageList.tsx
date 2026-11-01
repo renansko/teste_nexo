@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useRef } from "react";
-import { Check, LoaderCircle, X } from "lucide-react";
-import type { ChatMessage, Option, TicketView, TraceAction } from "@/lib/api";
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronDown, LoaderCircle, X } from "lucide-react";
+import type { ChatMessage, Option, TicketView, Trace, TraceAction } from "@/lib/api";
+import { DecisionDetails, hasDetails } from "@/components/trace/DecisionDetails";
+import traceStyles from "@/components/trace/Trace.module.css";
 import { looseOptions, OptionChips, PayloadCards } from "./payload/Payload";
 import styles from "./Chat.module.css";
 
@@ -55,7 +57,7 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
           const handlers = { interactive: live, onOption, onPickTicket };
           const chips = looseOptions(parts);
           return (
-            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions}>
+            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions} trace={m.trace}>
               {(m.content || chips) && (
                 <div className={styles.agentBubble}>
                   {m.content && <div className={styles.text}>{m.content}</div>}
@@ -87,7 +89,16 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
   );
 }
 
-function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAction[]; children: React.ReactNode }) {
+function AgentMessage(props: {
+  who: string;
+  analyst?: boolean;
+  actions?: TraceAction[];
+  trace?: Trace | null;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const details = hasDetails(props.trace) ? props.trace : null;
   return (
     <div className={styles.agentRow}>
       <div className={styles.statusLine}>
@@ -106,7 +117,20 @@ function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAc
             {a.label}
           </span>
         ))}
+        {details && (
+          <button
+            type="button"
+            className={traceStyles.toggle}
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Ocultar detalhes" : "Por quê?"}
+            <ChevronDown size={13} aria-hidden />
+          </button>
+        )}
       </div>
+      {details && open && <DecisionDetails trace={details} id={panelId} />}
       {props.children}
     </div>
   );

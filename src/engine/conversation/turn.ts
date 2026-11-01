@@ -19,7 +19,7 @@ import { interpretPendingInput, pendingParts } from "../actions/pending";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
 import {
-  PAYLOAD_OPTIONS, type AfterEffect, type AssistantConfig, type FlowState, type Payload, type PayloadPart,
+  PAYLOAD_OPTIONS, type AfterEffect, type AssistantConfig, type Confidence, type FlowState, type Payload, type PayloadPart,
   type PendingAction, type QuickOption, type Trace, type TurnContext, type TurnInput,
 } from "../types";
 
@@ -35,6 +35,15 @@ export interface TurnParams {
 export interface TurnResult { conversation: Conversation; messages: Message[] }
 
 export const ANALYST_OPTION: QuickOption = { id: "falar-com-um-analista", label: "Falar com um analista" };
+
+/** Código de `transferReason` quando o engine transfere por falta de segurança do agent. */
+export const LOW_CONFIDENCE_REASON = "low_confidence";
+
+/** Confiança declarada na resposta anterior do assistente (antes do turno atual). */
+function lastAgentConfidence(conversationId: string): Confidence | undefined {
+  const last = listMessages(conversationId).reverse().find((m) => m.role === "agent");
+  return last?.trace?.decision?.confidence;
+}
 
 let defaultRunner: AgentRunner | undefined;
 
@@ -208,7 +217,7 @@ class TurnHelpers {
         const conv = getConversation(this.conversationId)!;
         if (conv.state !== "agent") continue;
         updateConversation(this.conversationId, { state: "waiting_analyst", transferReason: e.reason, transferSummary: e.summary }, this.now);
-        this.system(`Conversa transferida para um analista. Motivo: ${e.reason}. Resumo: ${e.summary}`);
+        this.system(`Conversa transferida para um analista. Motivo: ${e.label ?? e.reason}. Resumo: ${e.summary}`);
       } else if (e.type === "link-ticket") {
         updateConversation(this.conversationId, { ticketId: e.ticketId }, this.now);
       }
@@ -248,9 +257,23 @@ class TurnHelpers {
     }
 
     const transferred = collector.afterEffects.some((e) => e.type === "transfer");
-    if (collector.decision?.confidence === "baixa" && !transferred && !pending && !collector.startFlow) {
-      payload = mergeOptions(payload, [ANALYST_OPTION]);
-      collector.notes.push("confiança baixa: oferecida transferência");
+    const decision = collector.decision;
+    if (decision?.confidence === "baixa" && !transferred && !pending && !collector.startFlow) {
+      if (lastAgentConfidence(conv.id) === "baixa") {
+        // Segunda resposta seguida sem segurança: o engine chama o analista (Anexo A), sem depender do clique.
+        collector.afterEffects.push({
+          type: "transfer",
+          reason: LOW_CONFIDENCE_REASON,
+          label: "o assistente não teve segurança para decidir",
+          summary: `O assistente ficou sem segurança em duas respostas seguidas. Entendeu: ${decision.understanding}. Por quê: ${decision.reasoning}`,
+        });
+        collector.notes.push("confiança baixa em duas respostas seguidas: transferido para um analista");
+        text = `${text ? `${text}\n\n` : ""}Como não tenho segurança para resolver isso sozinho, chamei um analista para continuar com você.`;
+        payload = payload.filter((x) => x.kind !== PAYLOAD_OPTIONS);
+      } else {
+        payload = mergeOptions(payload, [ANALYST_OPTION]);
+        collector.notes.push("confiança baixa: oferecida transferência");
+      }
     }
     if (!text) text = collector.startFlow ? "" : "Certo.";
 

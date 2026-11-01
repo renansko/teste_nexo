@@ -99,6 +99,36 @@ test("confiança baixa oferece analista; erro do legado vira nota no trace, não
   assert.ok((m.payload!.find((p) => p.kind === "options")!.data as { id: string }[]).some((o) => o.id === "falar-com-um-analista"));
 });
 
+test("confiança baixa em duas respostas seguidas: engine transfere com motivo legível", async () => {
+  const conv = newConv();
+  const runner = scriptedRunner(async (_p, tool) => {
+    await tool("report-decision", { understanding: "algo com o SAP", action: "perguntei detalhes", confidence: "baixa", reasoning: "descrição vaga" });
+    return "Pode me dar mais detalhes?";
+  });
+  const r1 = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "o sistema tá estranho" }, runner });
+  assert.equal(r1.conversation.state, "agent");
+
+  const r2 = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "não sei explicar" }, runner });
+  assert.equal(r2.conversation.state, "waiting_analyst");
+  assert.equal(r2.conversation.transferReason, "low_confidence");
+  assert.match(r2.conversation.transferSummary ?? "", /Entendeu: algo com o SAP/);
+  assert.deepEqual(r2.messages.map((m) => m.role), ["agent", "system"]);
+  assert.match(r2.messages[0]!.content, /chamei um analista/);
+  assert.ok(!(r2.messages[0]!.payload ?? []).some((p) => p.kind === "options"));
+  assert.match(r2.messages[1]!.content, /Motivo: o assistente não teve segurança para decidir\./);
+});
+
+test("transferência pelo agent mostra o motivo em texto, não o código", async () => {
+  const conv = newConv();
+  const runner = scriptedRunner(async (_p, tool) => {
+    await tool("transfer-to-analyst", { reason: "overdue", summary: "INC-20311 vencido há 3 dias, Ana quer retorno." });
+    return "Vou chamar um analista.";
+  });
+  const r = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "meu chamado está parado" }, runner });
+  assert.equal(r.conversation.transferReason, "overdue");
+  assert.match(r.messages[1]!.content, /Motivo: chamado vencido\./);
+});
+
 test("limites: conversa encerrada e limite de mensagens", async () => {
   const conv = newConv();
   const runner = scriptedRunner(() => "ok");

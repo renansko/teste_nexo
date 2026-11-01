@@ -25,7 +25,7 @@ Crítica 1 h corrida; Alta 4 h úteis; Média 3 dias úteis; Baixa 5 dias úteis
 
 ## Outras regras
 
-- Transferência: pedido do funcionário, crítico, vencido, baixa confiança (`transfer-to-analyst`); crítico criado → transferência automática.
+- Transferência: pedido do funcionário, crítico, vencido, baixa confiança (`transfer-to-analyst`); crítico criado → transferência automática; duas respostas seguidas com confiança baixa → transferência automática pelo engine ([DecisionTrace](../entities/DecisionTrace.md)).
 - Privacidade: 404 para chamado de outro funcionário.
 - Escopo só TI: regra de prompt (sem tool); fora de escopo o agent orienta e não abre chamado.
 - Limite de 30 mensagens do funcionário por conversa (`NEXO_MESSAGE_LIMIT`).

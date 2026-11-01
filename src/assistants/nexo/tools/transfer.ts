@@ -23,5 +23,5 @@ export const transferToAnalyst: ToolSpec<Input, { ok: true }> = {
     execute: async () => ({ ok: true as const }),
   }),
   summarize: (i) => TRANSFER_REASONS[i.reason],
-  afterEffects: (i) => [{ type: "transfer", reason: i.reason, summary: i.summary }],
+  afterEffects: (i) => [{ type: "transfer", reason: i.reason, label: TRANSFER_REASONS[i.reason], summary: i.summary }],
 };

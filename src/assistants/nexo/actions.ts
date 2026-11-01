@@ -26,7 +26,7 @@ export const createTicketAction: Executor = async (input, ctx) => {
   const effects: AfterEffect[] = [{ type: "link-ticket", ticketId: ticket.id }];
   let text = `Chamado ${ticket.id} criado com prioridade ${view.priorityLabel}. Prazo para a primeira resposta: ${view.slaLabel}, até ${formatDateTime(ticket.dueAt)}.`;
   if (ticket.priority === "critica") {
-    effects.push({ type: "transfer", reason: "critical", summary: `Chamado crítico ${ticket.id}: ${ticket.title}. ${ticket.description} Afetados: ${ticket.affected}.` });
+    effects.push({ type: "transfer", reason: "critical", label: "chamado crítico", summary: `Chamado crítico ${ticket.id}: ${ticket.title}. ${ticket.description} Afetados: ${ticket.affected}.` });
     text += " Como o caso é crítico, já estou acionando um analista para assumir agora.";
   }
   return {

@@ -38,11 +38,17 @@ Cada mensagem do funcionário passa por `src/engine/conversation/turn.ts`, nesta
 3. **Flow ativo (chat-formulário).** Sem LLM: a próxima pergunta, com opções, ou a conclusão. A abertura de chamado é um flow: tipo, título, descrição, categoria, impacto, urgência e afetados, pulando o que o agent já preencheu.
 4. **Agent (LLM).** Recebe as últimas 20 mensagens e um contexto curto (quem é o usuário, data, rascunho pendente). Decide entre as tools: `search-help-center`, `list-my-tickets`, `get-my-ticket`, `start-open-ticket-flow`, `add-ticket-update`, `reopen-ticket`, `transfer-to-analyst`, mais `suggest-quick-replies` e `report-decision`.
 
-Decisões que **não** ficam com o modelo: prioridade (matriz impacto × urgência do Anexo A), prazo (horas/dias úteis), duplicidade e reabertura (similaridade lexical sobre os chamados do próprio funcionário), privacidade (filtro por usuário nas tools), confirmação (qualquer escrita vira rascunho antes), transferência automática de chamado crítico e oferta de analista quando a confiança declarada é baixa.
+Decisões que **não** ficam com o modelo: prioridade (matriz impacto × urgência do Anexo A), prazo (horas/dias úteis), duplicidade e reabertura (similaridade lexical sobre os chamados do próprio funcionário), privacidade (filtro por usuário nas tools), confirmação (qualquer escrita vira rascunho antes), transferência automática de chamado crítico e escalonamento por confiança: na primeira resposta com confiança baixa o engine oferece um analista; se a seguinte também for baixa, transfere sozinho (motivo `low_confidence`), e o caso aparece no console como "Agent pediu ajuda".
 
 ## Transparência
 
-Cada resposta do assistente grava um `trace`: as ações executadas com rótulo humano ("consultou seus chamados", "classificou a prioridade: Alta, impede uma pessoa de trabalhar"), a decisão declarada pelo agent via tool obrigatória `report-decision` (o que entendeu, ação, confiança, porquê), modelo, tokens e duração. No SSE os rótulos chegam em tempo real (evento `action`) antes do texto; o detalhe completo chega no evento `trace` e fica persistido na mensagem para o console do analista.
+Cada resposta do assistente grava um `trace`: as ações executadas com rótulo humano ("consultou seus chamados", "classificou a prioridade: Alta, impede uma pessoa de trabalhar"), a decisão declarada pelo agent via tool obrigatória `report-decision` (o que entendeu, ação, confiança, porquê), modelo, tokens e duração. No SSE os rótulos chegam em tempo real (evento `action`) antes do texto; o detalhe completo chega no evento `trace` e fica persistido na mensagem.
+
+Na interface, os rótulos aparecem acima de cada resposta (como no protótipo) e o botão **"Por quê?"** abre o detalhe: o que o agent entendeu, o que fez, a segurança (alta, média ou baixa) e o porquê, mais cada passo com o resultado e a origem da resposta (IA, formulário guiado ou regra). No console do analista o mesmo painel ("Ver raciocínio") inclui as observações do engine, modelo, tokens e tempo, e já vem aberto quando a segurança foi baixa. A confiança é categórica, não percentual: o modelo não tem calibração que justifique um número.
+
+## Console do analista
+
+`/atendente` (logins `fabio.nunes@nexo.com` e `gabriela.castro@nexo.com`): lista com busca e filtros (Todas, Para você, Com o agent, Minhas), etiqueta de status por conversa ("Transferida · INC-20311", "Agent pediu ajuda", "Agent atendendo"), histórico com o raciocínio do agent, resumo da transferência, assumir (agent pausado), responder, devolver ao agent, encerrar e painel com os chamados do funcionário. Atualiza por polling.
 
 ## Como a qualidade das decisões é garantida
 

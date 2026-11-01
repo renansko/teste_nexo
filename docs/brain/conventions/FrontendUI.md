@@ -9,7 +9,7 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 | `/entrar` | Identificação | público |
 | `/atendimento` | Chat — Novo chamado / Consulta e transferência | `employee` |
 | `/perfil` | Cliente — Meu perfil | `employee` |
-| `/atendente` | Atendente — Conversas / Atendimento assumido | `analyst` (ainda placeholder) |
+| `/atendente` | Atendente — Conversas / Atendimento assumido | `analyst` |
 
 `SessionProvider` chama `GET /api/auth/me`; sem sessão manda para `/entrar`, papel errado manda para a home do papel (`HOME_BY_ROLE`). A sessão é o cookie httpOnly `nexo_session` do backend (`AuthSession`, página a criar pelo back); o front nunca guarda token.
 
@@ -23,9 +23,18 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 - Rascunho (`draft`): as opções da mesma mensagem viram a barra de ações do card. Ids `confirm` / `edit:<campo>` / `cancel` definem o estilo do botão.
 - Contador `userMessages/limit` vem do backend; atingido o limite, o composer bloqueia e oferece nova conversa.
 
+- Transparência: "Por quê?" na linha de passos abre o detalhe da decisão (`DecisionDetails`); no console, "Ver raciocínio" mostra a versão técnica e já vem aberto quando a segurança foi baixa.
+
+## Console do analista (`src/components/analyst/`)
+
+- Filtros calculados no cliente sobre a lista inteira: "Para você" = `waiting_analyst`; "Com o agent" = `agent`; "Minhas" = `analyst` com `analystId` = eu. A busca vai ao servidor (`q`, debounce 250 ms).
+- Polling: lista a cada 4 s, conversa aberta a cada 3 s (sem push). Ações (assumir, devolver, encerrar, responder) recarregam conversa e lista.
+- Etiqueta "Agent pediu ajuda" ⇔ `transferReason = low_confidence` ([DecisionTrace](../entities/DecisionTrace.md)).
+- Cards estruturados (rascunho, chamados, opções) aparecem como resumo em texto: o analista vê o que o funcionário recebeu, sem botões.
+- ≤ 1280 px o painel de chamados sobrepõe a conversa e começa fechado; ≤ 720 px lista e conversa viram telas alternadas.
+
 ## Pendências
 
-- Console do analista (`/atendente`): só placeholder com sessão.
 - Números da vitrine do login ("8 s", "72%") são estáticos; não há métrica no backend.
 - "Redefinir senha" desabilitado: a API não tem esse fluxo.
-- Painel de transparência do trace (decisão, confiança) ainda não aparece para o funcionário.
+- Mensagens do analista não guardam o autor: o console mostra o analista atual da conversa.

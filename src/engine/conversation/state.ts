@@ -35,10 +35,14 @@ export function analystReply(id: string, analyst: Employee, text: string, now = 
   return { conversation: getConversation(id)!, message };
 }
 
-/** Devolve ao agent, que volta a responder com o histórico (inclusive as falas do analista). */
+/**
+ * Devolve ao agent, que volta a responder com o histórico (inclusive as falas do analista).
+ * Em atendimento: só quem assumiu. Aguardando atendente: qualquer analista (triagem sem assumir).
+ */
 export function returnToAgent(id: string, analyst: Employee, now = new Date()): { conversation: Conversation; messages: Message[] } {
   const c = load(id);
-  if (c.state !== "analyst" || c.analystId !== analyst.id) throw new AppError("NOT_ASSIGNED", "Só quem está atendendo pode devolver", 409);
+  const waiting = c.state === "waiting_analyst";
+  if (!waiting && (c.state !== "analyst" || c.analystId !== analyst.id)) throw new AppError("NOT_ASSIGNED", "Só quem está atendendo pode devolver", 409);
   const conversation = updateConversation(id, { state: "agent", analystId: null, transferReason: null }, now);
   return { conversation, messages: [system(id, `${analyst.name} devolveu a conversa ao Nexo Assist.`, now)] };
 }

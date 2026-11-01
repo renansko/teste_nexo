@@ -119,7 +119,8 @@ export interface ActionResult { text: string; payload?: Payload; trace?: Partial
 
 /** Efeitos que o engine aplica após uma ação/turno (regras determinísticas da persona). */
 export type AfterEffect =
-  | { type: "transfer"; reason: string; summary: string }
+  /** `reason` é o código (vai para `transferReason`); `label` é o texto humano exibido na mensagem de sistema. */
+  | { type: "transfer"; reason: string; label?: string; summary: string }
   | { type: "link-ticket"; ticketId: string };
 
 // ---- Tools ----
