@@ -1,17 +1,31 @@
 # Conversation
 
-Conversa persistida entre cliente, agent e analista. Código: `src/services/conversations.ts`, tabelas `conversations`/`messages` em `src/lib/db.ts`.
+Conversa entre funcionário, assistente (persona) e analista. Código: `src/services/conversations/conversationService.ts`; projeção pública em `src/engine/conversation/view.ts`.
 
 ## Estados
 
-`agent` → `waiting_analyst` → `analyst` → `closed`. `closed` pode ser definido pelo analista a qualquer momento.
+`agent` → `waiting_analyst` → `analyst` → `agent` (devolvida) · qualquer → `closed`.
+
+| Transição | Quem | Onde |
+|---|---|---|
+| `agent → waiting_analyst` | tool `transfer-to-analyst` ou chamado crítico criado | [Turn](../functions/Turn.md) (`AfterEffect` transfer) |
+| `agent|waiting_analyst → analyst` | analista (`take`) | [AnalystConsoleApi](../functions/AnalystConsoleApi.md) |
+| `analyst → agent` | o mesmo analista (`return`) | idem |
+| `* → closed` | analista (`close`) | idem |
 
 ## Invariantes
 
-- Só em `agent` o agent responde. Em qualquer outro estado a mensagem do cliente é salva e não gera resposta automática.
-- `closed` rejeita novas mensagens (`CONVERSATION_CLOSED`, HTTP 409).
-- `waiting_analyst` é definido somente pela tool `escalate-to-analyst`, que também cria e vincula um [Ticket](Ticket.md).
-- `analyst` é definido quando o analista responde.
-- Estado e mensagens sobrevivem a reinício ([Persistence](../conventions/Persistence.md)).
+- O funcionário nunca muda o estado; só o engine (regras) e o analista.
+- Só em `agent` o assistente responde. Nos outros estados a mensagem do funcionário é gravada e o turno devolve `messages: []`.
+- `closed` rejeita mensagens (`CONVERSATION_CLOSED`, 409). `userMessageCount >= limits.maxUserMessages` rejeita (`MESSAGE_LIMIT`, 409); o limite é da persona (30 na Nexo).
+- `user_message_count` é incrementado em `addMessage` para `role = user` (contagem única, inclusive mensagens na fila do analista).
+- Uma conversa tem no máximo um `activeFlow` **ou** um `pendingAction`; `take` e `close` limpam ambos.
+- `ticketId` aponta para o último chamado criado/alterado nesta conversa (`AfterEffect` link-ticket).
+- `transferSummary` sobrevive à devolução ao agent e entra no contexto do modelo ("já passou por um analista").
+- Toda conversa tem `assistant_id` (hoje sempre `nexo`), seam para multi-persona.
 
-Ver [HandleMessage](../functions/HandleMessage.md).
+## Mensagens
+
+`role`: `user`, `agent`, `analyst`, `system`. `payload` (partes estruturadas) e `trace` ([DecisionTrace](DecisionTrace.md)) só em `agent`. Mensagens `system` registram transições (transferida, assumida, devolvida, encerrada) e aparecem ao funcionário e ao analista.
+
+Ver [Turn](../functions/Turn.md), [PendingAction](../services/PendingAction.md), [FlowEngine](../services/FlowEngine.md).

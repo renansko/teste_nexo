@@ -2,33 +2,50 @@
 
 ## Como utilizar
 
-Leia esta página primeiro. Antes de alterar um conceito documentado, consulte entidade, serviço, funções e convenções relacionadas.
+Leia esta página primeiro. Antes de alterar um conceito documentado, consulte entidade, serviço, funções e convenções relacionadas. Visão geral e trade-offs estão no [README](../../README.md).
 
 ## Entidades
 
-- [Conversation](entities/Conversation.md) — Conversa persistida e sua máquina de estados agent ↔ analista.
-- [Ticket](entities/Ticket.md) — Chamado simulado de suporte.
+- [Conversation](entities/Conversation.md) — Conversa, estados agent ↔ analista, flow ativo, ação pendente e limite.
+- [Ticket](entities/Ticket.md) — Chamado do Anexo A: tipo, categoria, prioridade, prazo, status.
+- [Employee](entities/Employee.md) — Funcionário/analista; fonte do login e da privacidade.
+- [HelpArticle](entities/HelpArticle.md) — Artigo da central de ajuda e sua busca.
+- [DecisionTrace](entities/DecisionTrace.md) — Trace por mensagem: ações, decisão, custo.
 
 ## Serviços
 
-- [TicketService](services/TicketService.md) — Serviço de chamados simulado, separado do agent.
-- [SupportAgent](services/SupportAgent.md) — Agent Mastra e suas tools.
+- [AssistantConfig](services/AssistantConfig.md) — Seam de persona: o que o engine exige de uma persona.
+- [NexoAssistant](services/NexoAssistant.md) — Persona Nexo: instruções, tools, executores.
+- [FlowEngine](services/FlowEngine.md) — Chat-formulário determinístico (flow de abertura de chamado).
+- [PendingAction](services/PendingAction.md) — Rascunho e confirmação obrigatória antes de efeitos.
+- [TicketService](services/TicketService.md) — Sistema de chamados simulado e gateway legado.
 
 ## Funções
 
-- [HandleMessage](functions/HandleMessage.md) — Contratos de `handleUserMessage` e `handleAnalystAction`.
+- [Turn](functions/Turn.md) — Ordem de decisão de um turno (`runTurn`).
+- [ChatApi](functions/ChatApi.md) — Contrato HTTP do funcionário, eventos SSE e payloads.
+- [AnalystConsoleApi](functions/AnalystConsoleApi.md) — Contrato do console do analista e transições.
 
 ## Convenções
 
-- [AgentBoundary](conventions/AgentBoundary.md) — O agent só acessa dados via tools.
-- [Persistence](conventions/Persistence.md) — SQLite como fonte única de estado.
+- [AgentBoundary](conventions/AgentBoundary.md) — O agent só acessa dados via tools com contexto do usuário.
+- [ServiceDeskRules](conventions/ServiceDeskRules.md) — Anexo A em código: prioridade, prazo, duplicidade, escopo.
+- [AuthSession](conventions/AuthSession.md) — Token HMAC, cookie e Bearer, roles.
+- [LegacyOutage](conventions/LegacyOutage.md) — Indisponibilidade simulada e retry.
+- [Persistence](conventions/Persistence.md) — SQLite, migrações, JSON em colunas.
 
 ## Produto
 
-- [Requirements](product/Requirements.md) — Requisitos técnicos do desafio e decisões pendentes.
+- [Requirements](product/Requirements.md) — Resumo do PRD do desafio e pendências.
 
 ## Mapa de símbolos
 
-- `handleUserMessage` → [HandleMessage](functions/HandleMessage.md)
-- `createSupportAgent` → [SupportAgent](services/SupportAgent.md)
-- `ticketService` → [TicketService](services/TicketService.md)
+- `runTurn`, `turnAsEventStream` → [Turn](functions/Turn.md)
+- `wrapTools`, `TurnCollector` → [DecisionTrace](entities/DecisionTrace.md)
+- `startFlow`, `advanceFlow`, `resumeAtStep` → [FlowEngine](services/FlowEngine.md)
+- `interpretPendingInput`, `pendingParts` → [PendingAction](services/PendingAction.md)
+- `takeConversation`, `returnToAgent`, `closeConversation` → [AnalystConsoleApi](functions/AnalystConsoleApi.md)
+- `signSession`, `requireSession` → [AuthSession](conventions/AuthSession.md)
+- `priorityFor`, `computeDueAt`, `findRelated` → [ServiceDeskRules](conventions/ServiceDeskRules.md)
+- `legacyGateway`, `withRetry` → [LegacyOutage](conventions/LegacyOutage.md)
+- `nexoAssistant`, `openTicketFlow`, `nexoActions` → [NexoAssistant](services/NexoAssistant.md)

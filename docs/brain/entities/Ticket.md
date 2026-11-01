@@ -1,9 +1,16 @@
 # Ticket
 
-Chamado simulado. Código: `src/services/tickets/`.
+Chamado do service desk (Anexo A). Código: `src/services/tickets/types.ts`, `ticketService.ts`.
 
-- Id `CH-XXXXXXXX`. Status: `open`, `in_progress`, `resolved`, `closed`. Prioridade: `low|medium|high`.
-- Criado como `open`. Seed de 2 chamados só se a tabela estiver vazia.
-- Uma conversa tem no máximo um chamado vinculado (`conversations.ticket_id`).
+- Id `INC-2xxxx` (incidente) ou `REQ-1xxxx` (requisição), sequencial por prefixo (`ticket_sequences`); o seed fixa ids do PRD (ex.: `INC-20311`).
+- Categorias: Acesso, Rede e VPN, Hardware, Software, E-mail, Outros.
+- Prioridade `critica | alta | media | baixa`; status `aberto | em_atendimento | aguardando_analista | aprovado | resolvido | fechado`. Status "vivos" (`OPEN_STATUSES`): os quatro primeiros.
+- Campos obrigatórios na abertura: título, descrição, tipo, categoria, prioridade, afetados (`affected`, texto).
+- `dueAt` = prazo da próxima resposta/atualização, calculado pela prioridade ([ServiceDeskRules](../conventions/ServiceDeskRules.md)); **renovado em toda atualização** e na reabertura. Vencido = status vivo e `now > dueAt` (`toView(...).overdue`).
+- `resolvedAt` marca a resolução; reabertura só até 7 dias depois (`REOPEN_NOT_ALLOWED` senão) e volta a `aberto`.
+- Atualizações (`ticket_updates`) têm autor e papel (`employee | analyst | agent | system`).
+- Privacidade: `getTicketForRequester` devolve `undefined` para chamado de outro funcionário; a API responde 404, nunca 403 (não revela existência).
+
+`TicketView` (o que sai para cliente e modelo) acrescenta `overdue`, `priorityLabel`, `statusLabel`, `slaLabel`.
 
 Ver [TicketService](../services/TicketService.md).
