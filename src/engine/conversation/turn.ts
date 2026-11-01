@@ -280,7 +280,9 @@ class TurnHelpers {
 
     if (collector.pending) {
       pending = withActionId({ ...collector.pending, createdAt: this.now.toISOString() });
-      payload = [...payload.filter((x) => x.kind !== PAYLOAD_OPTIONS), ...pendingParts(pending)];
+      // Com rascunho, a tela mostra só o rascunho: cards de consultas feitas para decidir (ex.: lista de chamados)
+      // competiriam com ele e pareceriam opções. O rascunho já identifica o chamado alvo.
+      payload = pendingParts(pending);
     } else if (collector.cancelPending) {
       pending = null;
     }

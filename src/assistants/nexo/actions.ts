@@ -8,7 +8,7 @@ import { withRetry } from "@/services/tickets/legacyGateway";
 import { AppError, notFound } from "@/lib/errors";
 import type { TicketCategory, TicketPriority, TicketType } from "@/services/tickets/types";
 import { ticketPart, ticketsPart } from "./payload";
-import { formatDateTime, TYPE_LABEL, type TicketDraft } from "./flows/openTicket";
+import { existingTicketDraft, formatDateTime } from "./flows/openTicket";
 
 type Executor = (input: Record<string, unknown>, ctx: ActionContext) => Promise<ActionResult>;
 
@@ -22,10 +22,7 @@ function duplicateProposal(ticketId: string, input: Record<string, unknown>, ctx
   const existing = getTicketForRequester(ticketId, ctx.userId)!;
   const view = toView(existing, ctx.now);
   const text = String(input.description);
-  const draft: Partial<TicketDraft> = {
-    mode: "update", ticket: view, text, title: view.title, type: view.type, typeLabel: TYPE_LABEL[view.type],
-    category: view.category, priority: view.priority, priorityLabel: view.priorityLabel, related: [view],
-  };
+  const draft = existingTicketDraft(view, "update", text, ctx.now);
   return {
     text: `Antes de criar, encontrei o chamado ${view.id} (${view.title}) aberto sobre o mesmo problema, então não criei outro. Proponho complementá-lo com o que você contou. Confere?`,
     payload: [ticketsPart([view])],

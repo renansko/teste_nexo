@@ -8,7 +8,7 @@ import { canReopen } from "@/services/tickets/dedup";
 import { withRetry } from "@/services/tickets/legacyGateway";
 import { isOpenStatus, TICKET_CATEGORIES } from "@/services/tickets/types";
 import { currentUserId } from "./context";
-import { OPEN_TICKET_FLOW, TYPE_LABEL, type TicketDraft } from "../flows/openTicket";
+import { existingTicketDraft, OPEN_TICKET_FLOW } from "../flows/openTicket";
 
 type StartInput = { title?: string; description?: string; type?: "INC" | "REQ"; category?: (typeof TICKET_CATEGORIES)[number]; forceNew?: boolean; relatedTicketId?: string };
 
@@ -58,7 +58,7 @@ export const addTicketUpdate: ToolSpec<{ ticketId: string; text: string }, Pendi
       if (!ticket) throw notFound("Chamado");
       if (!isOpenStatus(ticket.status)) throw new AppError("TICKET_NOT_OPEN", `O chamado ${ticket.id} não está aberto (${ticket.status}).`, 409);
       const view = toView(ticket);
-      const draft: Partial<TicketDraft> = { mode: "update", ticket: view, text, title: view.title, type: view.type, typeLabel: TYPE_LABEL[view.type], category: view.category, priority: view.priority, priorityLabel: view.priorityLabel, related: [] };
+      const draft = existingTicketDraft(view, "update", text, new Date());
       return { kind: "update-ticket", label: `complementar o chamado ${ticket.id}`, input: { ticketId: ticket.id, text }, draft, createdAt: new Date().toISOString() };
     },
   }),
@@ -78,7 +78,7 @@ export const reopenTicket: ToolSpec<{ ticketId: string; reason: string }, Pendin
       if (!ticket) throw notFound("Chamado");
       if (!canReopen(ticket, now)) throw new AppError("REOPEN_NOT_ALLOWED", `O chamado ${ticket.id} não pode ser reaberto: só chamados resolvidos há até 7 dias.`, 409);
       const view = toView(ticket, now);
-      const draft: Partial<TicketDraft> = { mode: "reopen", ticket: view, text: reason, title: view.title, type: view.type, typeLabel: TYPE_LABEL[view.type], category: view.category, priority: view.priority, priorityLabel: view.priorityLabel, related: [] };
+      const draft = existingTicketDraft(view, "reopen", reason, now);
       return { kind: "reopen-ticket", label: `reabrir o chamado ${ticket.id}`, input: { ticketId: ticket.id, text: reason }, draft, createdAt: now.toISOString() };
     },
   }),

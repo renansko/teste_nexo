@@ -14,3 +14,4 @@
 - 2026-11-01 | duplicidade | Dedup refeito no banco ao gravar (DUPLICATE_TICKET, BEGIN IMMEDIATE), idempotency_key por rascunho, ActionQueue para pedidos confirmados com o sistema fora, relatedTicketId (agent indica paráfrase, flow confere).
 - 2026-11-01 | outbox | Confirmação vira outbox: rascunho sai e ação entra em action_queue na mesma transação; worker retoma itens de processos que caíram (STALE_PROCESSING_MS).
 - 2026-11-01 | duplicidade | list-my-tickets purpose=check (sem cards); iniciar flow zera o payload da mensagem do agent; instrução: duplicidade sempre pelo flow.
+- 2026-11-01 | rascunho | Turno com rascunho mostra só o rascunho; existingTicketDraft como fonte única (corrige prazo NaN e afetados vazios no complemento).

@@ -10,7 +10,7 @@
 4. Ação pendente: `confirm` executa; `cancel` descarta; `edit:<key>` reabre o flow; texto livre segue ao agent com o rascunho no contexto.
 5. Flow ativo → `advanceFlow`; termina.
 6. Agent: tools embrulhadas + `requestContext`; histórico = últimas N mensagens; `system` volátil (usuário, data, mensagens restantes, rascunho, resumo de transferência).
-7. Pós-agent: payload (cards + opções mescladas, máx. 6; vazio se o agent iniciou um flow, porque as consultas feitas para decidir não vão à tela); rascunho novo substitui opções; confiança baixa → opção de analista, ou transferência automática (`low_confidence`) se a resposta anterior do assistente também foi baixa; grava mensagem com trace; `confirm-pending-action` → executa; `startFlow` → primeira pergunta (segunda mensagem); `afterEffects` (transfer cria mensagem de sistema e muda estado).
+7. Pós-agent: payload (cards + opções mescladas, máx. 6; vazio se o agent iniciou um flow, porque as consultas feitas para decidir não vão à tela); rascunho novo → a mensagem mostra só o rascunho (cards de consulta descartados); confiança baixa → opção de analista, ou transferência automática (`low_confidence`) se a resposta anterior do assistente também foi baixa; grava mensagem com trace; `confirm-pending-action` → executa; `startFlow` → primeira pergunta (segunda mensagem); `afterEffects` (transfer cria mensagem de sistema e muda estado).
 
 ## Invariantes
 

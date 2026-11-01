@@ -39,6 +39,19 @@ export interface TicketDraft {
   related: TicketView[];
 }
 
+/**
+ * Rascunho para complementar/reabrir um chamado EXISTENTE: título, categoria, prioridade e afetados são os do chamado
+ * (a ação não os altera); o prazo mostrado é o renovado pela atualização (Anexo A). Fonte única para flow, tools e executor.
+ */
+export function existingTicketDraft(view: TicketView, mode: "update" | "reopen", text: string, now: Date, related: TicketView[] = []): TicketDraft {
+  return {
+    mode, ticket: view, text, title: view.title, description: view.description, type: view.type, typeLabel: TYPE_LABEL[view.type],
+    category: view.category, priority: view.priority, priorityLabel: view.priorityLabel,
+    priorityReason: mode === "update" ? "Prioridade do chamado existente; o prazo é renovado com o complemento." : "Prioridade do chamado existente; o prazo recomeça na reabertura.",
+    slaLabel: SLA_LABEL[view.priority], dueAt: computeDueAt(view.priority, now).toISOString(), affected: view.affected, related,
+  };
+}
+
 const has = (k: string) => (d: FlowData) => !!d[k];
 const CATEGORY_OPTIONS: QuickOption[] = TICKET_CATEGORIES.map((c) => ({ id: c, label: c }));
 
@@ -125,7 +138,7 @@ export const openTicketFlow: FlowDefinition = {
     const dup = related.find((r) => r.kind === "duplicate");
     if (dup) {
       const ticket = toView(dup.ticket, ctx.now);
-      const draft: TicketDraft = { ...base, mode: "update", ticket, text: data.description! };
+      const draft = existingTicketDraft(ticket, "update", data.description!, ctx.now, base.related);
       const pendingAction: PendingAction = {
         kind: "update-ticket", label: `complementar o chamado ${ticket.id}`,
         input: { ticketId: ticket.id, text: data.description!, flow: flowSnapshot }, draft,
@@ -142,7 +155,7 @@ export const openTicketFlow: FlowDefinition = {
     const reopen = related.find((r) => r.kind === "reopenable");
     if (reopen) {
       const ticket = toView(reopen.ticket, ctx.now);
-      const draft: TicketDraft = { ...base, mode: "reopen", ticket, text: data.description! };
+      const draft = existingTicketDraft(ticket, "reopen", data.description!, ctx.now, base.related);
       const pendingAction: PendingAction = {
         kind: "reopen-ticket", label: `reabrir o chamado ${ticket.id}`,
         input: { ticketId: ticket.id, text: data.description!, flow: flowSnapshot }, draft,

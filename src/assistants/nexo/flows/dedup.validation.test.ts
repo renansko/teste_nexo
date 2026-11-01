@@ -151,6 +151,25 @@ test("7b. mesmo se o agent listar em modo 'show', iniciar o flow não leva os ca
   assert.deepEqual(r.messages[0]!.payload ?? [], []);
 });
 
+test("8. agent lista e prepara o complemento direto: a tela mostra só o rascunho, completo (prazo e afetados)", async () => {
+  const user = getEmployee("emp-ana")!;
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  const runner = scriptedRunner(async (_p, tool) => {
+    await tool("list-my-tickets", {}); // modo "show"
+    await tool("add-ticket-update", { ticketId: "INC-20311", text: "Continua lento e agora trava no Teams." });
+    return "Já existe um chamado aberto sobre isso. Preparei um complemento.";
+  });
+  const r = await runTurn({ conversationId: conv.id, user, input: { text: "notebook continua lento" }, runner });
+  const m = r.messages[0]!;
+  assert.deepEqual(m.payload!.map((p) => p.kind), ["draft", "options"]); // sem a lista de chamados
+  const d = draftOf(m);
+  assert.equal(d.ticket?.id, "INC-20311");
+  assert.ok(!Number.isNaN(new Date(d.dueAt).getTime()), `prazo inválido: ${d.dueAt}`);
+  assert.equal(d.slaLabel, "3 dias úteis");
+  assert.equal(d.affected, "Só eu");
+  assert.equal(d.priority, "media"); // a do chamado existente
+});
+
 test("6b. indicação do agent é conferida: chamado de outro funcionário é ignorado", async () => {
   const { draft, message } = await untilDraft("emp-ana", {
     title: "VPN caindo toda hora", description: "Cai a cada 10 minutos.", type: "INC", category: "Rede e VPN", relatedTicketId: "INC-20287", // do Bruno
