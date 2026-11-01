@@ -273,7 +273,9 @@ class TurnHelpers {
     });
 
     let text = result.text.trim();
-    let payload: Payload = mergeOptions(collector.payload, collector.options);
+    // Quando o agent inicia um flow, a mensagem dele é só a introdução: cards e opções das consultas que ele fez
+    // para decidir (ex.: lista de chamados ao checar duplicidade) não vão ao funcionário. O flow traz o que importa.
+    let payload: Payload = collector.startFlow ? [] : mergeOptions(collector.payload, collector.options);
     let pending: PendingAction | null | undefined = undefined;
 
     if (collector.pending) {

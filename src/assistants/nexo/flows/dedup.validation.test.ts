@@ -117,6 +117,40 @@ test("6a. paráfrase: o agent indica o chamado relacionado e o flow propõe comp
   assert.match(message.trace!.decision!.reasoning, /o agent indicou que é o mesmo problema/);
 });
 
+test("7. checagem de duplicidade não mostra a lista de chamados: só o rascunho com o chamado relacionado", async () => {
+  const user = getEmployee("emp-ana")!;
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  const runner = scriptedRunner(async (_p, tool) => {
+    await tool("list-my-tickets", { purpose: "check", status: "all" });
+    await tool("start-open-ticket-flow", { ...NOTEBOOK, relatedTicketId: "INC-20311" });
+    return "Vou registrar isso para você.";
+  });
+  const r = await runTurn({ conversationId: conv.id, user, input: { text: "meu notebook continua lento depois do update, preciso abrir chamado" }, runner });
+  const intro = r.messages[0]!;
+  assert.deepEqual(intro.payload ?? [], []); // nenhum card de lista, nenhum "falar com analista" do INC-20311 vencido
+  assert.equal(intro.trace!.actions[0]!.label, "verificou se já existe chamado parecido");
+
+  const send = (input: TurnInput) => runTurn({ conversationId: conv.id, user, input, runner: neverRunner });
+  await send({ optionId: "eu" });
+  const d = (await send({ optionId: "atrapalha" })).messages[0]!;
+  const cards = d.payload!.filter((p) => p.kind === "tickets").flatMap((p) => p.data as { id: string }[]).map((t) => t.id);
+  assert.deepEqual(cards, ["INC-20311"]); // só o relacionado
+  assert.deepEqual(optionIds(d), ["confirm", "criar-um-novo-mesmo-assim", "cancel"]);
+});
+
+test("7b. mesmo se o agent listar em modo 'show', iniciar o flow não leva os cards da lista para a tela", async () => {
+  const user = getEmployee("emp-ana")!;
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  const runner = scriptedRunner(async (_p, tool) => {
+    await tool("list-my-tickets", {});
+    await tool("suggest-quick-replies", { options: ["Abrir outro chamado"] });
+    await tool("start-open-ticket-flow", NOTEBOOK);
+    return "Vou abrir um chamado.";
+  });
+  const r = await runTurn({ conversationId: conv.id, user, input: { text: "abrir chamado" }, runner });
+  assert.deepEqual(r.messages[0]!.payload ?? [], []);
+});
+
 test("6b. indicação do agent é conferida: chamado de outro funcionário é ignorado", async () => {
   const { draft, message } = await untilDraft("emp-ana", {
     title: "VPN caindo toda hora", description: "Cai a cada 10 minutos.", type: "INC", category: "Rede e VPN", relatedTicketId: "INC-20287", // do Bruno
