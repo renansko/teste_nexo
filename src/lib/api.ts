@@ -143,11 +143,12 @@ export const api = {
     const d = await request<{ conversation: Conversation; messages: RawMessage[] }>(`/api/conversations/${encodeURIComponent(id)}`);
     return { conversation: d.conversation, messages: d.messages.map(toMessage) };
   },
+  /** Polling incremental: estado atual + mensagens com id > afterId. */
   async messagesAfter(id: string, afterId: string) {
-    const d = await request<RawMessage[] | { messages: RawMessage[] }>(
+    const d = await request<{ conversation: Conversation; messages: RawMessage[] }>(
       `/api/conversations/${encodeURIComponent(id)}/messages?after=${encodeURIComponent(afterId)}`,
     );
-    return (Array.isArray(d) ? d : d.messages).map(toMessage);
+    return { conversation: d.conversation, messages: d.messages.map(toMessage) };
   },
 };
 

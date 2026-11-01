@@ -4,6 +4,6 @@ Requisitos técnicos do desafio: TypeScript estrito; Mastra (ou LangGraph.js); q
 
 ## Pendências
 
-- Anexo C (protótipo) não foi fornecido: UI atual é provisória (`src/app/page.tsx`).
+- Anexo C (protótipo Pencil `nexo.pen`) recebido; telas do funcionário implementadas, console do analista pendente ([FrontendUI](../conventions/FrontendUI.md)).
 - Painel do analista ainda não existe (só API em `/api/conversations/[id]`).
 - Regras de negócio do desafio (escopo do agent, SLAs) não foram fornecidas.

@@ -30,7 +30,7 @@ const ERRORS: Record<string, string> = {
   CONVERSATION_CLOSED: "Esta conversa foi encerrada. Comece uma nova conversa para continuar.",
 };
 
-/** Polling: com analista envolvido, mais frequente e com estado; com o agent, só mensagens novas. */
+/** Polling de respostas do analista: mais frequente quando há analista envolvido. */
 const POLL_ANALYST_MS = 3000;
 const POLL_AGENT_MS = 6000;
 
@@ -70,20 +70,22 @@ export function ChatScreen() {
   const state = conversation?.state;
   useEffect(() => {
     if (!convId || !state || state === "closed" || sending) return;
-    const withAnalyst = state !== "agent";
     const t = setInterval(async () => {
       try {
-        if (withAnalyst) return void (await load(convId));
-        const after = lastIdRef.current;
-        if (!after) return;
-        const fresh = await api.messagesAfter(convId, after);
-        if (fresh.length) await load(convId); // analista assumiu/respondeu: recarrega estado
+        const fresh = await api.messagesAfter(convId, lastIdRef.current ?? "0");
+        setConversation(fresh.conversation);
+        if (fresh.messages.length) {
+          setMessages((prev) => {
+            const known = new Set(prev.map((m) => m.id));
+            return [...prev, ...fresh.messages.filter((m) => !known.has(m.id))];
+          });
+        }
       } catch {
         /* falha transitória de polling: tenta no próximo ciclo */
       }
-    }, withAnalyst ? POLL_ANALYST_MS : POLL_AGENT_MS);
+    }, state === "agent" ? POLL_AGENT_MS : POLL_ANALYST_MS);
     return () => clearInterval(t);
-  }, [convId, state, sending, load]);
+  }, [convId, state, sending]);
 
   async function send(input: SendInput, display: string) {
     setError(undefined);

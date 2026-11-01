@@ -22,6 +22,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 
 - [AgentBoundary](conventions/AgentBoundary.md) — O agent só acessa dados via tools.
 - [Persistence](conventions/Persistence.md) — SQLite como fonte única de estado.
+- [FrontendUI](conventions/FrontendUI.md) — Rotas do front, sessão, SSE/polling e regras de interação dos cards.
 
 ## Produto
 
@@ -32,3 +33,4 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - `handleUserMessage` → [HandleMessage](functions/HandleMessage.md)
 - `createSupportAgent` → [SupportAgent](services/SupportAgent.md)
 - `ticketService` → [TicketService](services/TicketService.md)
+- `api`, `streamMessage`, `SessionProvider`, `ChatScreen` → [FrontendUI](conventions/FrontendUI.md)
