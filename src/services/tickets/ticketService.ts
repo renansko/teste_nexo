@@ -1,58 +1,192 @@
 /**
- * Serviço de chamados SIMULADO. Fica deliberadamente fora de src/agent:
- * o agent só o acessa via tools (src/agent/tools.ts).
+ * Serviço de chamados SIMULADO (sistema legado). Não conhece agent, conversa nem LLM.
+ * Toda operação pública passa pelo gateway que simula indisponibilidade.
  * @wiki docs/brain/services/TicketService.md
  */
-import { randomUUID } from "node:crypto";
-import { getDb } from "@/lib/db";
-import type { Ticket, TicketPriority, TicketStatus } from "./types";
+import { getDb, transaction } from "@/lib/db";
+import { AppError, notFound } from "@/lib/errors";
+import { computeDueAt, isPastDue, SLA_LABEL } from "./sla";
+import { canReopen, findRelated, type RelatedTicket } from "./dedup";
+import { legacyGateway } from "./legacyGateway";
+import {
+  isOpenStatus, PRIORITY_LABEL, STATUS_LABEL,
+  type Ticket, type TicketCategory, type TicketPriority, type TicketStatus, type TicketType, type TicketUpdate,
+} from "./types";
 
 interface Row {
-  id: string; customer: string; subject: string; description: string;
-  status: TicketStatus; priority: TicketPriority; created_at: string; updated_at: string;
+  id: string; type: TicketType; title: string; description: string; category: TicketCategory;
+  priority: TicketPriority; status: TicketStatus; requester_id: string; affected: string;
+  created_at: string; updated_at: string; due_at: string; resolved_at: string | null;
 }
 
 const toTicket = (r: Row): Ticket => ({
-  id: r.id, customer: r.customer, subject: r.subject, description: r.description,
-  status: r.status, priority: r.priority, createdAt: r.created_at, updatedAt: r.updated_at,
+  id: r.id, type: r.type, title: r.title, description: r.description, category: r.category,
+  priority: r.priority, status: r.status, requesterId: r.requester_id, affected: r.affected,
+  createdAt: r.created_at, updatedAt: r.updated_at, dueAt: r.due_at, resolvedAt: r.resolved_at,
 });
 
-export function createTicket(input: {
-  customer: string; subject: string; description: string; priority?: TicketPriority;
-}): Ticket {
-  const now = new Date().toISOString();
-  const id = `CH-${randomUUID().slice(0, 8).toUpperCase()}`;
-  getDb()
-    .prepare(`INSERT INTO tickets VALUES (?,?,?,?,?,?,?,?)`)
-    .run(id, input.customer, input.subject, input.description, "open", input.priority ?? "medium", now, now);
-  return getTicket(id)!;
+/** Visão enriquecida para UI/agent: rótulos e flag de vencido. */
+export interface TicketView extends Ticket {
+  overdue: boolean;
+  priorityLabel: string;
+  statusLabel: string;
+  slaLabel: string;
 }
 
-export function getTicket(id: string): Ticket | undefined {
+export const toView = (t: Ticket, now = new Date()): TicketView => ({
+  ...t,
+  overdue: isOpenStatus(t.status) && isPastDue(t.dueAt, now),
+  priorityLabel: PRIORITY_LABEL[t.priority],
+  statusLabel: STATUS_LABEL[t.status],
+  slaLabel: SLA_LABEL[t.priority],
+});
+
+export interface NewTicket {
+  type: TicketType; title: string; description: string; category: TicketCategory;
+  priority: TicketPriority; requesterId: string; affected: string;
+}
+
+const PREFIX_START: Record<TicketType, number> = { INC: 20400, REQ: 10500 };
+
+function nextId(type: TicketType): string {
+  const db = getDb();
+  const row = db.prepare(`SELECT next FROM ticket_sequences WHERE prefix = ?`).get(type) as { next: number } | undefined;
+  const n = row?.next ?? PREFIX_START[type];
+  db.prepare(`INSERT INTO ticket_sequences (prefix, next) VALUES (?, ?) ON CONFLICT(prefix) DO UPDATE SET next = excluded.next`).run(type, n + 1);
+  return `${type}-${n}`;
+}
+
+function getRaw(id: string): Ticket | undefined {
   const r = getDb().prepare(`SELECT * FROM tickets WHERE id = ?`).get(id) as Row | undefined;
   return r && toTicket(r);
 }
 
-export function listTickets(filter: { customer?: string; status?: TicketStatus } = {}): Ticket[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM tickets
-       WHERE (? IS NULL OR customer = ?) AND (? IS NULL OR status = ?)
-       ORDER BY created_at DESC`,
-    )
-    .all(filter.customer ?? null, filter.customer ?? null, filter.status ?? null, filter.status ?? null) as unknown as Row[];
-  return rows.map(toTicket);
+/** Inserção direta (seed/testes): não passa pelo gateway e aceita id e datas explícitos. */
+export function insertTicketRaw(t: Ticket): Ticket {
+  getDb().prepare(`INSERT INTO tickets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    t.id, t.type, t.title, t.description, t.category, t.priority, t.status, t.requesterId, t.affected,
+    t.createdAt, t.updatedAt, t.dueAt, t.resolvedAt,
+  );
+  const n = Number(t.id.split("-")[1]);
+  const db = getDb();
+  const seq = db.prepare(`SELECT next FROM ticket_sequences WHERE prefix = ?`).get(t.type) as { next: number } | undefined;
+  if (!seq || seq.next <= n) {
+    db.prepare(`INSERT INTO ticket_sequences (prefix, next) VALUES (?, ?) ON CONFLICT(prefix) DO UPDATE SET next = excluded.next`).run(t.type, Math.max(n + 1, PREFIX_START[t.type]));
+  }
+  return t;
 }
 
-export function updateTicketStatus(id: string, status: TicketStatus): Ticket | undefined {
-  getDb().prepare(`UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?`).run(status, new Date().toISOString(), id);
-  return getTicket(id);
+export function insertUpdateRaw(u: Omit<TicketUpdate, "id">): void {
+  getDb().prepare(`INSERT INTO ticket_updates (ticket_id, author_id, author_role, text, created_at) VALUES (?,?,?,?,?)`)
+    .run(u.ticketId, u.authorId, u.authorRole, u.text, u.createdAt);
 }
 
-/** Popula chamados de exemplo apenas se a tabela estiver vazia. */
-export function seedTickets(): void {
-  const { n } = getDb().prepare(`SELECT COUNT(*) AS n FROM tickets`).get() as { n: number };
-  if (n > 0) return;
-  createTicket({ customer: "maria@example.com", subject: "Fatura duplicada", description: "Fui cobrada duas vezes no mês.", priority: "high" });
-  createTicket({ customer: "joao@example.com", subject: "Não consigo logar", description: "Erro ao redefinir a senha.", priority: "medium" });
+export function countTickets(): number {
+  return (getDb().prepare(`SELECT COUNT(*) AS n FROM tickets`).get() as { n: number }).n;
+}
+
+// ---- API pública (passa pelo gateway legado) ----
+
+export function createTicket(input: NewTicket, now = new Date()): Ticket {
+  return legacyGateway.call(() =>
+    transaction(() => {
+      const id = nextId(input.type);
+      const iso = now.toISOString();
+      const t: Ticket = {
+        id, type: input.type, title: input.title, description: input.description, category: input.category,
+        priority: input.priority, requesterId: input.requesterId, affected: input.affected,
+        status: "aberto", createdAt: iso, updatedAt: iso,
+        dueAt: computeDueAt(input.priority, now).toISOString(), resolvedAt: null,
+      };
+      insertTicketRaw(t);
+      return t;
+    }),
+  );
+}
+
+export function getTicket(id: string): Ticket | undefined {
+  return legacyGateway.call(() => getRaw(id));
+}
+
+/** Privacidade: só devolve o chamado se pertence ao solicitante. Caso contrário, "não existe". */
+export function getTicketForRequester(id: string, requesterId: string): Ticket | undefined {
+  const t = getTicket(id.trim().toUpperCase());
+  return t && t.requesterId === requesterId ? t : undefined;
+}
+
+export function listTickets(filter: { requesterId?: string; status?: TicketStatus; open?: boolean } = {}): Ticket[] {
+  return legacyGateway.call(() => {
+    const where: string[] = [];
+    const args: (string | number)[] = [];
+    if (filter.requesterId) { where.push(`requester_id = ?`); args.push(filter.requesterId); }
+    if (filter.status) { where.push(`status = ?`); args.push(filter.status); }
+    if (filter.open === true) where.push(`status IN ('aberto','em_atendimento','aguardando_analista','aprovado')`);
+    if (filter.open === false) where.push(`status IN ('resolvido','fechado')`);
+    const sql = `SELECT * FROM tickets ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY updated_at DESC`;
+    return (getDb().prepare(sql).all(...args) as unknown as Row[]).map(toTicket);
+  });
+}
+
+export function listUpdates(ticketId: string): TicketUpdate[] {
+  return legacyGateway.call(() =>
+    (getDb().prepare(`SELECT * FROM ticket_updates WHERE ticket_id = ? ORDER BY id`).all(ticketId) as unknown as
+      { id: number; ticket_id: string; author_id: string; author_role: TicketUpdate["authorRole"]; text: string; created_at: string }[])
+      .map((r) => ({ id: r.id, ticketId: r.ticket_id, authorId: r.author_id, authorRole: r.author_role, text: r.text, createdAt: r.created_at })),
+  );
+}
+
+/** Complementa o chamado. Renova o prazo (Anexo A: o prazo vale para cada atualização). */
+export function addTicketUpdate(
+  id: string,
+  update: { authorId: string; authorRole: TicketUpdate["authorRole"]; text: string },
+  now = new Date(),
+): Ticket {
+  return legacyGateway.call(() =>
+    transaction(() => {
+      const t = getRaw(id);
+      if (!t) throw notFound("Chamado");
+      if (!isOpenStatus(t.status)) throw new AppError("TICKET_NOT_OPEN", "Chamado não está aberto", 409);
+      const iso = now.toISOString();
+      insertUpdateRaw({ ticketId: id, ...update, createdAt: iso });
+      getDb().prepare(`UPDATE tickets SET updated_at = ?, due_at = ? WHERE id = ?`)
+        .run(iso, computeDueAt(t.priority, now).toISOString(), id);
+      return getRaw(id)!;
+    }),
+  );
+}
+
+export function updateTicketStatus(id: string, status: TicketStatus, now = new Date()): Ticket {
+  return legacyGateway.call(() => {
+    const t = getRaw(id);
+    if (!t) throw notFound("Chamado");
+    const iso = now.toISOString();
+    const resolvedAt = status === "resolvido" ? iso : status === "fechado" ? t.resolvedAt : null;
+    getDb().prepare(`UPDATE tickets SET status = ?, updated_at = ?, resolved_at = ? WHERE id = ?`).run(status, iso, resolvedAt, id);
+    return getRaw(id)!;
+  });
+}
+
+/** Reabre chamado resolvido há até 7 dias; volta a `aberto` com novo prazo. */
+export function reopenTicket(id: string, reason: { authorId: string; text: string }, now = new Date()): Ticket {
+  return legacyGateway.call(() =>
+    transaction(() => {
+      const t = getRaw(id);
+      if (!t) throw notFound("Chamado");
+      if (!canReopen(t, now)) throw new AppError("REOPEN_NOT_ALLOWED", "Só chamados resolvidos há até 7 dias podem ser reabertos", 409);
+      const iso = now.toISOString();
+      insertUpdateRaw({ ticketId: id, authorId: reason.authorId, authorRole: "employee", text: `Reaberto: ${reason.text}`, createdAt: iso });
+      getDb().prepare(`UPDATE tickets SET status = 'aberto', updated_at = ?, due_at = ?, resolved_at = NULL WHERE id = ?`)
+        .run(iso, computeDueAt(t.priority, now).toISOString(), id);
+      return getRaw(id)!;
+    }),
+  );
+}
+
+/** Candidatos a duplicado/reabertura entre os chamados do próprio solicitante. */
+export function findRelatedTickets(
+  requesterId: string,
+  candidate: { title: string; description?: string; category?: string },
+  now = new Date(),
+): RelatedTicket[] {
+  return findRelated(candidate, listTickets({ requesterId }), now);
 }
