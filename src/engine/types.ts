@@ -124,13 +124,37 @@ export type AfterEffect =
 
 // ---- Tools ----
 
-export interface ToolSpec {
-  tool: Tool<any, any, any>;
-  /** Texto humano do trace. Pode usar o input: ({ id }) => `consultou o chamado ${id}`. */
-  label: string | ((input: Record<string, unknown>) => string);
-  /** Se true, a tool não executa: devolve uma ação pendente para confirmação do usuário. */
-  requiresConfirmation?: boolean;
+/** Contexto por requisição disponível nas tools via `context.requestContext`. */
+export interface TurnContext extends Record<string, unknown> {
+  userId: string;
+  conversationId: string;
+  assistantId: string;
+  now: string;
 }
+
+export interface ToolSpec<TIn = any, TOut = any> {
+  tool: Tool<any, any, any>;
+  /** Texto humano do trace: "consultou seus chamados". Pode usar o input. */
+  label: string | ((input: TIn) => string);
+  /** Resumo curto do resultado para o trace: "3 chamados, 1 vencido". */
+  summarize?: (input: TIn, output: TOut) => string | undefined;
+  /** Partes estruturadas (cards, opções) que o cliente renderiza junto da resposta. */
+  toPayload?: (input: TIn, output: TOut) => PayloadPart[] | undefined;
+  /** O que o modelo vê (padrão: o output inteiro). Use para reduzir tokens. */
+  toModel?: (output: TOut) => unknown;
+  /** Efeitos que o engine aplica ao fim do turno (transferência, vínculo de chamado). */
+  afterEffects?: (input: TIn, output: TOut) => AfterEffect[] | undefined;
+  /**
+   * Se true, a tool não produz efeito: seu `execute` devolve uma `PendingAction` que fica
+   * aguardando confirmação explícita do usuário (rascunho → Confirmar).
+   */
+  requiresConfirmation?: boolean;
+  /** Tools internas do engine não aparecem como ação no trace. */
+  hidden?: boolean;
+}
+
+/** Output de uma tool que inicia um flow determinístico. */
+export interface StartFlowOutput { startFlow: { flowId: string; data: FlowData; intro?: string } }
 
 // ---- Persona ----
 

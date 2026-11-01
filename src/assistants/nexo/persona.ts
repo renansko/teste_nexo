@@ -3,14 +3,18 @@
  * @wiki docs/brain/services/NexoAssistant.md
  */
 import type { AssistantConfig } from "@/engine/types";
+import { NEXO_INSTRUCTIONS } from "./instructions";
+import { searchHelpCenter } from "./tools/helpCenter";
+import { getMyTicket, listMyTickets } from "./tools/tickets";
+import { transferToAnalyst } from "./tools/transfer";
 
 export const nexoAssistant: AssistantConfig = {
   id: "nexo",
   name: "Nexo Assist",
   model: process.env.NEXO_MODEL ?? "claude-sonnet-5-5",
   fastModel: process.env.NEXO_FAST_MODEL ?? "claude-haiku-5-5",
-  instructions: "", // preenchido na etapa 3
-  tools: {},
+  instructions: NEXO_INSTRUCTIONS,
+  tools: { searchHelpCenter, listMyTickets, getMyTicket, transferToAnalyst },
   flows: {},
   actions: {},
   limits: {
