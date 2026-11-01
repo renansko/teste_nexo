@@ -15,4 +15,5 @@ Registro do que o assistente fez e por quê, gravado em `messages.trace` e emiti
 - Uma tool nunca lança para dentro do modelo: erro vira `{ error: code, message }` como resultado, ação com `status: error` e nota.
 - Evento SSE `action` é emitido duas vezes por ação (pending e final) com o **mesmo id**.
 - `confidence: baixa` sem transferência/rascunho/flow → engine acrescenta a opção "Falar com um analista" e registra nota.
+- Tool que suspende a run ([HumanInTheLoop](../services/HumanInTheLoop.md)) fica com `status: pending` e `summary: "perguntou: …"`; a mensagem da pergunta pode não ter `decision`. A ação da tool precede as ações sintéticas que ela registra (prioridade, duplicidade).
 - O trace fica visível ao funcionário (detalhe da resposta) e ao analista (console).

@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeDb, getDb } from "@/lib/db";
 import { resetBoot } from "@/lib/bootstrap";
+import { resetMastra } from "@/engine/agent/mastra";
 import { legacyGateway } from "@/services/tickets/legacyGateway";
 import { seedNexo } from "@/assistants/nexo/seed";
 
 export function useTempDb(opts: { seed?: boolean; now?: Date } = {}): string {
   closeDb();
   resetBoot();
+  resetMastra();
   const path = join(mkdtempSync(join(tmpdir(), "nexo-test-")), "nexo.db");
   process.env.NEXO_DB_PATH = path;
   legacyGateway.configure({ rate: 0 });

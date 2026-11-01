@@ -1,6 +1,7 @@
 /**
  * Orquestra UM turno de conversa. Ordem de decisão:
- *   estado da conversa → ação pendente (confirmar/cancelar/editar) → flow ativo (sem LLM) → agent (LLM).
+ *   estado da conversa → ação pendente (confirmar/cancelar/editar) → run suspensa (HITL: retoma o agent com a resposta)
+ *   → flow ativo (sem LLM) → agent (LLM).
  * Tudo que o agent faz passa por tools embrulhadas (trace); efeitos colaterais só após confirmação.
  * @wiki docs/brain/functions/Turn.md
  */
@@ -11,17 +12,20 @@ import {
   addMessage, getConversation, listMessages, updateConversation, type Conversation, type Message,
 } from "@/services/conversations/conversationService";
 import { getAssistant } from "../registry";
-import type { AgentRunner } from "../agent/types";
-import { agentError, createMastraRunner } from "../agent/mastraRunner";
+import type { AgentRunner, AgentRunParams } from "../agent/types";
+import { agentError, createMastraRunner, RESUME_GONE } from "../agent/mastraRunner";
+import { discardSuspendedRun } from "../agent/mastra";
 import { newCollector, wrapTools, type TurnCollector } from "../tools/wrap";
-import { advanceFlow, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
+import { advanceFlow, CANCEL_OPTION, isCancelInput, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
 import { interpretPendingInput, pendingParts } from "../actions/pending";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
 import {
   PAYLOAD_OPTIONS, type AfterEffect, type AssistantConfig, type FlowState, type Payload, type PayloadPart,
-  type PendingAction, type QuickOption, type Trace, type TurnContext, type TurnInput,
+  type PendingAction, type QuickOption, type SuspendedRun, type SuspendPrompt, type Trace, type TurnContext, type TurnInput,
 } from "../types";
+
+const CANCEL_SUSPENDED_TEXT = "Ok, cancelei. Se quiser, é só me dizer o que precisa.";
 
 export interface TurnParams {
   conversationId: string;
@@ -67,6 +71,19 @@ export async function runTurn(p: TurnParams): Promise<TurnResult> {
 
   if (conv.state !== "agent") {
     // Analista envolvido: a mensagem fica na fila dele; o agent não responde.
+    return t.finish();
+  }
+
+  if (conv.suspendedRun) {
+    // Uma tool parou para perguntar: a resposta retoma a run do agent de onde ela parou.
+    if (isCancelInput(p.input)) {
+      updateConversation(conv.id, { suspendedRun: null }, now);
+      discardSuspendedRun(conv.suspendedRun.runId);
+      t.reply(conv.suspendedRun.prompt.cancelText ?? CANCEL_SUSPENDED_TEXT, [], { source: "rule", notes: [`${conv.suspendedRun.toolId}: pergunta cancelada pelo funcionário`] });
+      return t.finish();
+    }
+    const { runId, toolCallId } = conv.suspendedRun;
+    await t.agentTurn(conv, p.user, runner, ctx, { runId, toolCallId, data: { text: content, ...(p.input.optionId ? { optionId: p.input.optionId } : {}) } });
     return t.finish();
   }
 
@@ -215,7 +232,10 @@ class TurnHelpers {
     }
   }
 
-  async agentTurn(conv: Conversation, user: Employee, runner: AgentRunner, ctx: { userId: string; conversationId: string; now: Date }): Promise<void> {
+  async agentTurn(
+    conv: Conversation, user: Employee, runner: AgentRunner, ctx: { userId: string; conversationId: string; now: Date },
+    resume?: AgentRunParams["resume"],
+  ): Promise<void> {
     const started = Date.now();
     const collector = newCollector();
     const tools = wrapTools(this.config, collector, this.emit, { hasPendingAction: !!conv.pendingAction });
@@ -228,15 +248,47 @@ class TurnHelpers {
     const result = await runner({
       config: this.config,
       tools,
-      messages: buildHistory(conv, this.config.limits.historyWindow),
+      messages: resume ? [] : buildHistory(conv, this.config.limits.historyWindow),
       system: buildSystemContext(this.config, conv, user, this.now),
       requestContext,
       onTextDelta: (delta) => this.emit({ type: "text.delta", delta }),
+      ...(resume ? { resume } : {}),
     }).catch((e: unknown) => {
       throw e instanceof AppError ? e : agentError(e);
+    }).catch((e: AppError) => {
+      if (resume && e.code === RESUME_GONE) {
+        // O snapshot da run sumiu (ex.: storage limpo): descarta a pergunta e pede para recomeçar.
+        updateConversation(this.conversationId, { suspendedRun: null }, this.now);
+        this.reply("Perdi o contexto da pergunta anterior. Pode me dizer de novo o que precisa?", [], { source: "rule", notes: ["run suspensa não encontrada ao retomar"] }, started);
+        return undefined;
+      }
+      throw e;
     });
+    if (!result) return;
 
     let text = result.text.trim();
+    const trace: Trace = {
+      source: "agent",
+      actions: collector.actions,
+      decision: collector.decision,
+      model: result.model,
+      usage: result.usage,
+      durationMs: 0,
+      notes: collector.notes,
+    };
+
+    if (result.suspended) {
+      // A run parou numa pergunta ao funcionário: persiste a run e responde com a pergunta e suas opções.
+      const prompt = collector.suspended?.prompt ?? (result.suspended.payload as SuspendPrompt);
+      const run: SuspendedRun = { runId: result.suspended.runId, toolCallId: result.suspended.toolCallId, toolId: result.suspended.toolId, prompt, startedAt: this.now.toISOString() };
+      updateConversation(this.conversationId, { suspendedRun: run, pendingAction: null, activeFlow: null }, this.now);
+      const payload = mergeOptions([], [...(prompt.options ?? []), CANCEL_OPTION]);
+      trace.notes = [...collector.notes, `${run.toolId}: aguardando resposta do funcionário`];
+      trace.durationMs = Date.now() - started;
+      this.reply(text ? `${text}\n\n${prompt.text}` : prompt.text, payload, trace, started);
+      return;
+    }
+
     let payload: Payload = mergeOptions(collector.payload, collector.options);
     let pending: PendingAction | null | undefined = undefined;
 
@@ -254,16 +306,8 @@ class TurnHelpers {
     }
     if (!text) text = collector.startFlow ? "" : "Certo.";
 
-    const trace: Trace = {
-      source: "agent",
-      actions: collector.actions,
-      decision: collector.decision,
-      model: result.model,
-      usage: result.usage,
-      durationMs: Date.now() - started,
-      notes: collector.notes,
-    };
-    if (pending !== undefined) updateConversation(this.conversationId, { pendingAction: pending }, this.now);
+    trace.durationMs = Date.now() - started;
+    updateConversation(this.conversationId, { suspendedRun: null, ...(pending !== undefined ? { pendingAction: pending } : {}) }, this.now);
     if (text || payload.length) this.reply(text, payload, trace, started);
 
     if (collector.confirmPending && conv.pendingAction) await this.executePending(conv.pendingAction, ctx);

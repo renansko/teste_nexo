@@ -19,7 +19,7 @@ Conversa entre funcionário, assistente (persona) e analista. Código: `src/serv
 - Só em `agent` o assistente responde. Nos outros estados a mensagem do funcionário é gravada e o turno devolve `messages: []`.
 - `closed` rejeita mensagens (`CONVERSATION_CLOSED`, 409). `userMessageCount >= limits.maxUserMessages` rejeita (`MESSAGE_LIMIT`, 409); o limite é da persona (30 na Nexo).
 - `user_message_count` é incrementado em `addMessage` para `role = user` (contagem única, inclusive mensagens na fila do analista).
-- Uma conversa tem no máximo um `activeFlow` **ou** um `pendingAction`; `take` e `close` limpam ambos.
+- Uma conversa tem no máximo um entre `activeFlow`, `pendingAction` e `suspendedRun` ([HumanInTheLoop](../services/HumanInTheLoop.md)); `take` e `close` limpam os três (e descartam a run suspensa).
 - `ticketId` aponta para o último chamado criado/alterado nesta conversa (`AfterEffect` link-ticket).
 - `transferSummary` sobrevive à devolução ao agent e entra no contexto do modelo ("já passou por um analista").
 - Toda conversa tem `assistant_id` (hoje sempre `nexo`), seam para multi-persona.

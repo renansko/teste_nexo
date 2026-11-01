@@ -12,7 +12,7 @@ Nenhum efeito colateral sem confirmação explícita: tools de escrita e flows p
 
 ## Invariantes
 
-- Tools com `requiresConfirmation` devolvem a `PendingAction` e o modelo recebe `{ status: "awaiting_confirmation", draft }`; nada é gravado.
+- Tools com `requiresConfirmation` devolvem a `PendingAction` e o modelo recebe `{ status: "awaiting_confirmation", draft }`; nada é gravado. Tools que concluem um chat-formulário ([HumanInTheLoop](HumanInTheLoop.md)) devolvem `{ outcome }` e caem no mesmo contrato (com `summary` = texto do resultado).
 - O executor roda sem LLM (`source: action` no trace) e devolve texto, payload e `afterEffects` (`link-ticket`, `transfer`).
 - Falha do executor (ex.: `TICKET_SERVICE_UNAVAILABLE` após retries) **mantém** o rascunho e responde com as mesmas opções para nova tentativa.
 - Um novo rascunho substitui o anterior; `take`/`close` do analista descartam.

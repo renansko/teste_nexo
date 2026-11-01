@@ -10,7 +10,7 @@ Contrato HTTP do funcionário. Código: `src/app/api/auth/*`, `src/app/api/conve
 - `POST /api/conversations/:id/messages {text} | {optionId, text?}` (role `employee`): com `Accept: text/event-stream` → SSE; senão → `{ conversation, messages }`. Erros 409 `CONVERSATION_CLOSED` / `MESSAGE_LIMIT`, 502 `AGENT_ERROR`.
 - `GET /api/tickets?open=` → `TicketView[]` (só os meus). `GET /api/tickets/:id` → `{ ticket, updates }` (404 se de outro). `GET /api/help-center?q=`.
 
-`PublicConversation`: `id, assistantId, employeeId, analystId, state, ticketId, userMessages, limit, activeFlowId, hasPendingAction, transferReason, transferSummary, createdAt, updatedAt`. Nunca expõe `pendingAction.input`.
+`PublicConversation`: `id, assistantId, employeeId, analystId, state, ticketId, userMessages, limit, activeFlowId, suspendedTool, hasPendingAction, transferReason, transferSummary, createdAt, updatedAt`. Nunca expõe `pendingAction.input` nem o `runId` da run suspensa (`suspendedTool` é só o id da tool que perguntou).
 
 ## Mensagem
 
@@ -24,7 +24,7 @@ Contrato HTTP do funcionário. Código: `src/app/api/auth/*`, `src/app/api/conve
 | `ticket` | `{ ticket: TicketView, updates }` | detalhe |
 | `articles` | `{ id, title, body, category }[]` | central |
 
-Ids de opção reservados: `confirm`, `cancel`, `edit:<step>`; da Nexo: `falar-com-um-analista`, `abrir-um-chamado`, `criar-um-novo-mesmo-assim`, ids de chamado em minúsculas.
+Ids de opção reservados: `confirm`, `cancel` (rascunho, flow e pergunta HITL), `edit:<step>`; da Nexo: `falar-com-um-analista`, `abrir-um-chamado`, `criar-um-novo-mesmo-assim`, ids de chamado em minúsculas.
 
 ## SSE
 

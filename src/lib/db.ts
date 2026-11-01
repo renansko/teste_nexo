@@ -96,6 +96,11 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_messages_conv ON messages(conversation_id, id);
     `,
   },
+  {
+    version: 2,
+    // Run do agent suspensa por uma tool HITL (JSON SuspendedRun); o snapshot da run fica no storage do Mastra.
+    sql: `ALTER TABLE conversations ADD COLUMN suspended_run TEXT;`,
+  },
 ];
 
 let db: DatabaseSync | undefined;

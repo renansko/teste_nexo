@@ -97,6 +97,34 @@ export interface FlowDefinition {
 
 export interface FlowState { flowId: string; data: FlowData; stepIndex: number; startedAt: string }
 
+// ---- Human-in-the-loop (tool suspende a run do agent para perguntar ao funcionário) ----
+
+/**
+ * Payload com que uma tool HITL suspende a run (`context.suspend(prompt)`): o engine só renderiza
+ * `text` + `options` (+ cancelar). `stepKey`/`data` são estado da própria tool, devolvidos a ela na retomada.
+ * @wiki docs/brain/services/HumanInTheLoop.md
+ */
+export interface SuspendPrompt {
+  text: string;
+  options?: QuickOption[];
+  stepKey?: string;
+  data?: FlowData;
+  /** Texto ao cancelar a pergunta (descarta a run suspensa). */
+  cancelText?: string;
+}
+
+/** Resposta do funcionário entregue à tool na retomada (`context.resumeData`): a mesma entrada do turno. */
+export type ResumeAnswer = TurnInput;
+
+/** Run do agent suspensa aguardando resposta; persistida em `conversations.suspended_run`. */
+export interface SuspendedRun {
+  runId: string;
+  toolCallId: string;
+  toolId: string;
+  prompt: SuspendPrompt;
+  startedAt: string;
+}
+
 // ---- Ação pendente (confirmação obrigatória antes de efeito colateral) ----
 
 export interface PendingAction {
@@ -133,7 +161,7 @@ export interface TurnContext extends Record<string, unknown> {
 }
 
 export interface ToolSpec<TIn = any, TOut = any> {
-  tool: Tool<any, any, any>;
+  tool: Tool<any, any, any, any>;
   /** Texto humano do trace: "consultou seus chamados". Pode usar o input. */
   label: string | ((input: TIn) => string);
   /** Resumo curto do resultado para o trace: "3 chamados, 1 vencido". */
@@ -155,6 +183,9 @@ export interface ToolSpec<TIn = any, TOut = any> {
 
 /** Output de uma tool que inicia um flow determinístico. */
 export interface StartFlowOutput { startFlow: { flowId: string; data: FlowData; intro?: string } }
+
+/** Output de uma tool que concluiu um chat-formulário por conta própria (HITL): rascunho, payload e trace do resultado. */
+export interface FlowOutcomeOutput { outcome: FlowOutcome }
 
 // ---- Persona ----
 

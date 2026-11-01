@@ -13,6 +13,8 @@ export interface PublicConversation {
   userMessages: number;
   limit: number;
   activeFlowId: string | null;
+  /** Tool que suspendeu a run do agent aguardando resposta do funcionário (HITL). */
+  suspendedTool: string | null;
   hasPendingAction: boolean;
   transferReason: string | null;
   transferSummary: string | null;
@@ -24,7 +26,7 @@ export function publicConversation(c: Conversation): PublicConversation {
   return {
     id: c.id, assistantId: c.assistantId, employeeId: c.employeeId, analystId: c.analystId, state: c.state, ticketId: c.ticketId,
     userMessages: c.userMessageCount, limit: getAssistant(c.assistantId).limits.maxUserMessages,
-    activeFlowId: c.activeFlow?.flowId ?? null, hasPendingAction: !!c.pendingAction,
+    activeFlowId: c.activeFlow?.flowId ?? null, suspendedTool: c.suspendedRun?.toolId ?? null, hasPendingAction: !!c.pendingAction,
     transferReason: c.transferReason, transferSummary: c.transferSummary, createdAt: c.createdAt, updatedAt: c.updatedAt,
   };
 }

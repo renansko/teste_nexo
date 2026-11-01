@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db";
-import type { ConversationState, FlowState, MessageRole, Payload, PendingAction, Trace } from "@/engine/types";
+import type { ConversationState, FlowState, MessageRole, Payload, PendingAction, SuspendedRun, Trace } from "@/engine/types";
 
 export interface Conversation {
   id: string;
@@ -16,6 +16,8 @@ export interface Conversation {
   userMessageCount: number;
   activeFlow: FlowState | null;
   pendingAction: PendingAction | null;
+  /** Run do agent parada numa pergunta ao funcionário (HITL). */
+  suspendedRun: SuspendedRun | null;
   transferReason: string | null;
   transferSummary: string | null;
   createdAt: string;
@@ -35,7 +37,7 @@ export interface Message {
 interface ConvRow {
   id: string; assistant_id: string; employee_id: string; analyst_id: string | null; state: ConversationState;
   ticket_id: string | null; user_message_count: number; active_flow: string | null; pending_action: string | null;
-  transfer_reason: string | null; transfer_summary: string | null; created_at: string; updated_at: string;
+  suspended_run: string | null; transfer_reason: string | null; transfer_summary: string | null; created_at: string; updated_at: string;
 }
 interface MsgRow { id: number; conversation_id: string; role: MessageRole; content: string; payload: string | null; trace: string | null; created_at: string }
 
@@ -44,7 +46,7 @@ const parse = <T>(s: string | null): T | null => (s === null ? null : (JSON.pars
 const toConversation = (r: ConvRow): Conversation => ({
   id: r.id, assistantId: r.assistant_id, employeeId: r.employee_id, analystId: r.analyst_id, state: r.state,
   ticketId: r.ticket_id, userMessageCount: r.user_message_count, activeFlow: parse<FlowState>(r.active_flow),
-  pendingAction: parse<PendingAction>(r.pending_action), transferReason: r.transfer_reason,
+  pendingAction: parse<PendingAction>(r.pending_action), suspendedRun: parse<SuspendedRun>(r.suspended_run), transferReason: r.transfer_reason,
   transferSummary: r.transfer_summary, createdAt: r.created_at, updatedAt: r.updated_at,
 });
 
@@ -79,11 +81,11 @@ export function listConversations(filter: { state?: ConversationState; states?: 
   return rows.map(toConversation);
 }
 
-export type ConversationPatch = Partial<Pick<Conversation, "state" | "analystId" | "ticketId" | "activeFlow" | "pendingAction" | "transferReason" | "transferSummary">>;
+export type ConversationPatch = Partial<Pick<Conversation, "state" | "analystId" | "ticketId" | "activeFlow" | "pendingAction" | "suspendedRun" | "transferReason" | "transferSummary">>;
 
 const COLUMN: Record<keyof ConversationPatch, string> = {
   state: "state", analystId: "analyst_id", ticketId: "ticket_id", activeFlow: "active_flow",
-  pendingAction: "pending_action", transferReason: "transfer_reason", transferSummary: "transfer_summary",
+  pendingAction: "pending_action", suspendedRun: "suspended_run", transferReason: "transfer_reason", transferSummary: "transfer_summary",
 };
 
 export function updateConversation(id: string, patch: ConversationPatch, now = new Date()): Conversation {

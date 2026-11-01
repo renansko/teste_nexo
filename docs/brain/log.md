@@ -12,3 +12,4 @@
 - 2026-11-01 | llm | Provedor do LLM configurável (`NEXO_LLM_PROVIDER`); padrão passa a ser OpenAI `gpt-5-mini`.
 - 2026-11-01 | env | Environment: `.env` validado com zod (`src/lib/env.ts`) e checagem no boot via `instrumentation.ts`.
 - 2026-11-01 | estrutura | Model router do Mastra (`NEXO_MODEL=openai/gpt-6-luna`, sem `NEXO_LLM_PROVIDER` nem `@ai-sdk/*`); retry nas rotas `/api/tickets`; `assertCanUpdate`/`assertCanReopen` no TicketService.
+- 2026-11-01 | hitl | HumanInTheLoop: open-ticket pergunta suspendendo a run do agent (Mastra suspend/resume, @mastra/libsql); migração 2 (suspended_run); FlowEngine vira fonte de passos para dois drivers.

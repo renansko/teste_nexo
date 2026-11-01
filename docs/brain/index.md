@@ -16,7 +16,8 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 
 - [AssistantConfig](services/AssistantConfig.md) — Seam de persona: o que o engine exige de uma persona.
 - [NexoAssistant](services/NexoAssistant.md) — Persona Nexo: instruções, tools, executores.
-- [FlowEngine](services/FlowEngine.md) — Chat-formulário determinístico (flow de abertura de chamado).
+- [FlowEngine](services/FlowEngine.md) — Chat-formulário determinístico; passos reusados pela tool HITL e por "Editar X".
+- [HumanInTheLoop](services/HumanInTheLoop.md) — Tool suspende a run do agent para perguntar e retoma com a resposta (Mastra suspend/resume).
 - [PendingAction](services/PendingAction.md) — Rascunho e confirmação obrigatória antes de efeitos.
 - [TicketService](services/TicketService.md) — Sistema de chamados simulado e gateway legado.
 
@@ -44,12 +45,13 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 
 - `runTurn`, `turnAsEventStream` → [Turn](functions/Turn.md)
 - `wrapTools`, `TurnCollector` → [DecisionTrace](entities/DecisionTrace.md)
-- `startFlow`, `advanceFlow`, `resumeAtStep` → [FlowEngine](services/FlowEngine.md)
+- `startFlow`, `advanceFlow`, `resumeAtStep`, `answerStep`, `questionFor` → [FlowEngine](services/FlowEngine.md)
+- `hitl`, `observeSuspend`, `getMastra`, `discardSuspendedRun`, `openTicket` → [HumanInTheLoop](services/HumanInTheLoop.md)
 - `interpretPendingInput`, `pendingParts` → [PendingAction](services/PendingAction.md)
 - `takeConversation`, `returnToAgent`, `closeConversation` → [AnalystConsoleApi](functions/AnalystConsoleApi.md)
 - `signSession`, `requireSession` → [AuthSession](conventions/AuthSession.md)
 - `priorityFor`, `computeDueAt`, `findRelated` → [ServiceDeskRules](conventions/ServiceDeskRules.md)
 - `legacyGateway`, `withRetry` → [LegacyOutage](conventions/LegacyOutage.md)
-- `nexoAssistant`, `openTicketFlow`, `nexoActions` → [NexoAssistant](services/NexoAssistant.md)
+- `nexoAssistant`, `openTicketFlow`, `nexoActions`, `openTicket` → [NexoAssistant](services/NexoAssistant.md)
 - `env`, `assertRuntimeEnv`, `apiKeyVarFor` → [Environment](conventions/Environment.md)
 - `api`, `streamMessage`, `SessionProvider`, `ChatScreen` → [FrontendUI](conventions/FrontendUI.md)

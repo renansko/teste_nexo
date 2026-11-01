@@ -1,4 +1,7 @@
-/** Abertura de chamado de ponta a ponta pelo orquestrador: flow → rascunho → confirmação → efeito. */
+/**
+ * Abertura de chamado de ponta a ponta pelo orquestrador: tool open-ticket (human-in-the-loop) → perguntas
+ * com a run suspensa → rascunho → confirmação → efeito. "Editar X" do rascunho continua pelo flow determinístico.
+ */
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { useTempDb } from "@/test/helpers";
@@ -9,46 +12,67 @@ import { getTicket, listUpdates } from "@/services/tickets/ticketService";
 import { legacyGateway } from "@/services/tickets/legacyGateway";
 import { closeDb } from "@/lib/db";
 import { runTurn } from "@/engine/conversation/turn";
+import { takeConversation } from "@/engine/conversation/state";
+import type { ChatEvent } from "@/engine/conversation/events";
 import type { TurnInput } from "@/engine/types";
 import type { TicketDraft } from "./openTicket";
 
 const ana = () => getEmployee("emp-ana")!;
-const neverRunner = scriptedRunner(() => { throw new Error("o agent não deveria rodar durante o flow"); });
 
 beforeEach(() => useTempDb({ seed: true }));
 
-/** Agent inicia o flow com pré-preenchimento; depois os turnos são determinísticos. */
-async function start(conversationId: string, prefill: Record<string, unknown>) {
-  const runner = scriptedRunner(async (_p, tool) => {
-    await tool("start-open-ticket-flow", prefill);
+/**
+ * Agent: no primeiro turno chama open-ticket com o pré-preenchimento. Nos turnos seguintes só roda ao retomar
+ * a run (a tool já foi reexecutada com a resposta); se a tool concluiu, responde com o rascunho.
+ */
+function agent(prefill: Record<string, unknown>) {
+  return scriptedRunner(async (p, tool) => {
+    if (p.resume) {
+      await tool("report-decision", { understanding: "abrir chamado", action: "montei o rascunho", confidence: "alta", reasoning: "dados completos" });
+      return "Aqui está o rascunho do chamado. Posso criar?";
+    }
+    if (p.messages.at(-1)?.content !== "preciso abrir um chamado") throw new Error("o agent não deveria rodar fora do início e da retomada");
+    await tool("open-ticket", prefill);
     return "Vou abrir um chamado para isso.";
   });
-  return runTurn({ conversationId, user: ana(), input: { text: "preciso abrir um chamado" }, runner });
 }
-const send = (conversationId: string, input: TurnInput) => runTurn({ conversationId, user: ana(), input, runner: neverRunner });
+const start = (conversationId: string, prefill: Record<string, unknown>, emit?: (e: ChatEvent) => void) =>
+  runTurn({ conversationId, user: ana(), input: { text: "preciso abrir um chamado" }, runner: agent(prefill), emit });
+const send = (conversationId: string, input: TurnInput) => runTurn({ conversationId, user: ana(), input, runner: agent({}) });
 const optionIds = (m: { payload: { kind: string; data: unknown }[] | null }) => (m.payload!.find((p) => p.kind === "options")!.data as { id: string }[]).map((o) => o.id);
 const draftOf = (m: { payload: { kind: string; data: unknown }[] | null }) => m.payload!.find((p) => p.kind === "draft")!.data as TicketDraft;
 
-test("pré-preenchido: pergunta impacto e urgência, mostra rascunho, cria após confirmar; sobrevive a reinício", async () => {
+test("pré-preenchido: a tool pergunta impacto e urgência com a run suspensa, devolve o rascunho, cria após confirmar; sobrevive a reinício", async () => {
   const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
-  const r1 = await start(conv.id, { title: "Teclado do notebook parou de funcionar", description: "Desde hoje cedo nenhuma tecla responde; já reiniciei.", type: "INC", category: "Hardware" });
-  assert.deepEqual(r1.messages.map((m) => m.role), ["agent", "agent"]);
-  assert.match(r1.messages[1]!.content, /Quantas pessoas isso afeta\?/);
-  assert.deepEqual(optionIds(r1.messages[1]!), ["eu", "equipe", "empresa", "cancel"]);
-  assert.equal(r1.conversation.activeFlow?.flowId, "open-ticket");
+  const events: ChatEvent[] = [];
+  const r1 = await start(conv.id, { title: "Teclado do notebook parou de funcionar", description: "Desde hoje cedo nenhuma tecla responde; já reiniciei.", type: "INC", category: "Hardware" }, (e) => events.push(e));
+  assert.deepEqual(r1.messages.map((m) => m.role), ["agent"]);
+  assert.match(r1.messages[0]!.content, /Vou abrir um chamado para você/); // intro do flow só na primeira pergunta
+  assert.match(r1.messages[0]!.content, /Quantas pessoas isso afeta\?/);
+  assert.deepEqual(optionIds(r1.messages[0]!), ["eu", "equipe", "empresa", "cancel"]);
+  assert.equal(r1.conversation.suspendedRun?.toolId, "open-ticket");
+  assert.equal(r1.conversation.activeFlow, null);
+  const action = r1.messages[0]!.trace!.actions[0]!;
+  assert.equal(action.label, "montou o chamado");
+  assert.equal(action.status, "pending");
+  assert.match(action.summary ?? "", /perguntou: Quantas pessoas/);
+  assert.deepEqual(events.map((e) => e.type), ["message.start", "action", "action", "payload", "trace", "message.end", "conversation"]);
 
-  closeDb(); // reinício no meio do flow
+  closeDb(); // reinício no meio da pergunta: a run suspensa está persistida
 
   const r2 = await send(conv.id, { optionId: "eu" });
   assert.match(r2.messages[0]!.content, /urgência/);
+  assert.doesNotMatch(r2.messages[0]!.content, /Vou abrir um chamado para você/);
   const r3 = await send(conv.id, { text: "Parou, não consigo trabalhar" }); // rótulo digitado em vez de clique
+  assert.equal(r3.messages[0]!.content, "Aqui está o rascunho do chamado. Posso criar?");
   const draft = draftOf(r3.messages[0]!);
   assert.equal(draft.mode, "create");
   assert.equal(draft.priority, "alta");
   assert.equal(draft.affected, "Só eu");
   assert.deepEqual(optionIds(r3.messages[0]!), ["confirm", "edit:description", "edit:impact", "cancel"]);
-  assert.equal(r3.messages[0]!.trace!.actions.map((a) => a.label).join(","), "classificou a prioridade,verificou duplicidade");
-  assert.equal(r3.conversation.activeFlow, null);
+  assert.equal(r3.messages[0]!.trace!.actions.map((a) => a.label).join(","), "montou o chamado,classificou a prioridade,verificou duplicidade");
+  assert.equal(r3.messages[0]!.trace!.decision?.confidence, "alta");
+  assert.equal(r3.conversation.suspendedRun, null);
   assert.ok(r3.conversation.pendingAction);
 
   const r4 = await send(conv.id, { optionId: "confirm" });
@@ -59,10 +83,10 @@ test("pré-preenchido: pergunta impacto e urgência, mostra rascunho, cria após
   assert.equal(getTicket("INC-20400")?.requesterId, "emp-ana");
 });
 
-test("sem pré-preenchimento: pergunta tipo, título, descrição, categoria e afetados; cancelar no meio", async () => {
+test("sem pré-preenchimento: pergunta tipo, título, descrição, categoria; resposta inválida repete; cancelar no meio", async () => {
   const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
   const r1 = await start(conv.id, {});
-  assert.match(r1.messages[1]!.content, /O que aconteceu\?/);
+  assert.match(r1.messages[0]!.content, /O que aconteceu\?/);
   const r2 = await send(conv.id, { optionId: "REQ" });
   assert.match(r2.messages[0]!.content, /qual é o problema ou pedido/);
   const r3 = await send(conv.id, { text: "x" });
@@ -71,9 +95,20 @@ test("sem pré-preenchimento: pergunta tipo, título, descrição, categoria e a
   assert.match(r4.messages[0]!.content, /Me conta um pouco mais/);
   const r5 = await send(conv.id, { text: "Preciso para o novo projeto de marketing" });
   assert.match(r5.messages[0]!.content, /categoria/);
-  const r6 = await send(conv.id, { text: "cancelar" });
-  assert.match(r6.messages[0]!.content, /não vou abrir/);
-  assert.equal(r6.conversation.activeFlow, null);
+  const r6 = await send(conv.id, { text: "abc" });
+  assert.match(r6.messages[0]!.content, /Não entendi. Escolha uma das opções/);
+  const r7 = await send(conv.id, { text: "cancelar" });
+  assert.match(r7.messages[0]!.content, /não vou abrir/);
+  assert.equal(r7.messages[0]!.trace!.source, "rule");
+  assert.equal(getConversation(conv.id)!.suspendedRun, null);
+});
+
+test("analista assumir a conversa descarta a pergunta pendente", async () => {
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  await start(conv.id, {});
+  assert.ok(getConversation(conv.id)!.suspendedRun);
+  takeConversation(conv.id, getEmployee("an-fabio")!);
+  assert.equal(getConversation(conv.id)!.suspendedRun, null);
 });
 
 test("duplicidade: propõe complementar o chamado aberto parecido; confirmar renova o prazo", async () => {
@@ -84,6 +119,7 @@ test("duplicidade: propõe complementar o chamado aberto parecido; confirmar ren
   const draft = draftOf(r.messages[0]!);
   assert.equal(draft.mode, "update");
   assert.equal(draft.ticket?.id, "INC-20311");
+  assert.ok(r.messages[0]!.payload!.some((p) => p.kind === "tickets"));
   assert.ok(optionIds(r.messages[0]!).includes("criar-um-novo-mesmo-assim"));
   const before = getTicket("INC-20311")!.dueAt;
   const c = await send(conv.id, { text: "sim" });
@@ -103,7 +139,7 @@ test("reabertura: chamado resolvido há 4 dias parecido vira rascunho de reabert
   assert.equal(getTicket("INC-20150")?.status, "aberto");
 });
 
-test("editar prioridade reabre o passo; caso crítico transfere automaticamente ao criar", async () => {
+test("editar prioridade reabre o passo pelo flow determinístico; caso crítico transfere automaticamente ao criar", async () => {
   const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
   await start(conv.id, { title: "Sistema de faturamento fora do ar", description: "Ninguém do financeiro consegue emitir notas desde as 9h.", type: "INC", category: "Software" });
   await send(conv.id, { optionId: "eu" });
@@ -111,6 +147,8 @@ test("editar prioridade reabre o passo; caso crítico transfere automaticamente 
   assert.equal(draftOf(r1.messages[0]!).priority, "alta");
   const r2 = await send(conv.id, { optionId: "edit:impact" });
   assert.match(r2.messages[0]!.content, /Quantas pessoas/);
+  assert.equal(r2.messages[0]!.trace!.source, "flow");
+  assert.equal(r2.conversation.activeFlow?.flowId, "open-ticket");
   await send(conv.id, { optionId: "equipe" });
   await send(conv.id, { optionId: "parado" });
   const r3 = await send(conv.id, { text: "todo o financeiro" });

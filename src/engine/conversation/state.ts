@@ -4,6 +4,7 @@
  * @wiki docs/brain/entities/Conversation.md
  */
 import { AppError } from "@/lib/errors";
+import { discardSuspendedRun } from "@/engine/agent/mastra";
 import type { Employee } from "@/services/employees/employeeService";
 import { addMessage, getConversation, updateConversation, type Conversation, type Message } from "@/services/conversations/conversationService";
 
@@ -22,7 +23,8 @@ export function takeConversation(id: string, analyst: Employee, now = new Date()
   const c = load(id);
   if (c.state === "closed") throw new AppError("CONVERSATION_CLOSED", "Conversa encerrada", 409);
   if (c.state === "analyst" && c.analystId !== analyst.id) throw new AppError("ALREADY_TAKEN", "Outro analista já está atendendo", 409);
-  const conversation = updateConversation(id, { state: "analyst", analystId: analyst.id, activeFlow: null, pendingAction: null }, now);
+  if (c.suspendedRun) discardSuspendedRun(c.suspendedRun.runId);
+  const conversation = updateConversation(id, { state: "analyst", analystId: analyst.id, activeFlow: null, pendingAction: null, suspendedRun: null }, now);
   const m = c.state === "analyst" ? [] : [system(id, `${analyst.name} assumiu a conversa. O Nexo Assist está em pausa.`, now)];
   return { conversation, messages: m };
 }
@@ -46,6 +48,7 @@ export function returnToAgent(id: string, analyst: Employee, now = new Date()): 
 export function closeConversation(id: string, analyst: Employee, now = new Date()): { conversation: Conversation; messages: Message[] } {
   const c = load(id);
   if (c.state === "closed") return { conversation: c, messages: [] };
-  const conversation = updateConversation(id, { state: "closed", activeFlow: null, pendingAction: null }, now);
+  if (c.suspendedRun) discardSuspendedRun(c.suspendedRun.runId);
+  const conversation = updateConversation(id, { state: "closed", activeFlow: null, pendingAction: null, suspendedRun: null }, now);
   return { conversation, messages: [system(id, `${analyst.name} encerrou a conversa.`, now)] };
 }

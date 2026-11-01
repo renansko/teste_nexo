@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { Check, LoaderCircle, X } from "lucide-react";
+import { Check, LoaderCircle, MessageCircleQuestion, X } from "lucide-react";
 import type { ChatMessage, Option, TicketView, TraceAction } from "@/lib/api";
 import { looseOptions, OptionChips, PayloadCards } from "./payload/Payload";
 import styles from "./Chat.module.css";
@@ -67,7 +67,7 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
           );
         })}
         {streaming && (
-          <AgentMessage who="Nexo Assist" actions={streaming.actions}>
+          <AgentMessage who="Nexo Assist" actions={streaming.actions} live>
             <div className={styles.agentBubble}>
               {streaming.text ? (
                 <div className={styles.text}>{streaming.text}</div>
@@ -87,7 +87,11 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
   );
 }
 
-function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAction[]; children: React.ReactNode }) {
+/**
+ * `live`: turno em andamento (SSE), onde `pending` significa "executando" (spinner). Numa mensagem gravada,
+ * `pending` é uma tool que parou para perguntar ao funcionário: ícone estático de pergunta.
+ */
+function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAction[]; live?: boolean; children: React.ReactNode }) {
   return (
     <div className={styles.agentRow}>
       <div className={styles.statusLine}>
@@ -97,7 +101,11 @@ function AgentMessage(props: { who: string; analyst?: boolean; actions?: TraceAc
         {props.actions?.map((a) => (
           <span key={a.id} className={styles.step} data-status={a.status} title={a.summary}>
             {a.status === "pending" ? (
-              <LoaderCircle size={12} className={styles.spin} aria-hidden />
+              props.live ? (
+                <LoaderCircle size={12} className={styles.spin} aria-hidden />
+              ) : (
+                <MessageCircleQuestion size={12} aria-hidden />
+              )
             ) : a.status === "error" ? (
               <X size={12} aria-hidden />
             ) : (
