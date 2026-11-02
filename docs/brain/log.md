@@ -25,3 +25,5 @@
 - 2026-11-01 | merge | HITL + outbox/duplicidade/console na mesma base: `open-ticket` (HITL) absorve `relatedTicketId` e substitui `start-open-ticket-flow`; migração 3 (idempotency_key, action_queue); busca na central devolve só a opção 'Abrir um chamado' (artigos via cite-articles); payload do resultado do chat-formulário acompanha o rascunho.
 - 2026-11-01 | analista | Detalhe da conversa degrada só o painel de chamados (tickets: null) quando o legado está indisponível.
 - 2026-11-01 | front | Passos `quiet` no trace: busca na central some da linha de status do chat (segue no "Por quê?" e no console).
+- 2026-11-01 | front | Console: rodapé de atendimento quebra os botões em linha própria em larguras intermediárias (antes espremia o texto).
+- 2026-11-01 | escopo | Guarda determinística de escopo TI em `open-ticket` (`scope.ts`, OUT_OF_SCOPE); validação do PRD registrada em Requirements com pendências atualizadas.

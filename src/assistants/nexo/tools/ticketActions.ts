@@ -14,6 +14,12 @@ import { withRetry } from "@/services/tickets/legacyGateway";
 import { TICKET_CATEGORIES } from "@/services/tickets/types";
 import { currentUserId, turnContext } from "./context";
 import { existingTicketDraft, openTicketFlow } from "../flows/openTicket";
+import { detectOutOfScope, outOfScopeMessage, type OutOfScope } from "../scope";
+
+/** `open-ticket` recusou: pedido fora do escopo de TI (Anexo A). O modelo orienta; nada é perguntado nem gravado. */
+export interface OutOfScopeOutput { refused: "OUT_OF_SCOPE"; scope: OutOfScope; message: string }
+
+const scopeText = (input: OpenInput): string => [input.title, input.description].filter(Boolean).join(" ");
 
 /** Mesmo formato de `SuspendPrompt` (o engine renderiza `text` + `options`; `stepKey`/`data` voltam para a tool). */
 const suspendSchema = z.object({
@@ -45,8 +51,8 @@ function promptFor(data: FlowData, index: number, prefix?: string): SuspendPromp
   return { text: q.text, options: q.options, stepKey: openTicketFlow.steps[index]!.key, data, cancelText: openTicketFlow.cancelText };
 }
 
-export const openTicket: ToolSpec<OpenInput, FlowOutcomeOutput | undefined> = {
-  label: "montou o chamado",
+export const openTicket: ToolSpec<OpenInput, FlowOutcomeOutput | OutOfScopeOutput | undefined> = {
+  label: (input) => (detectOutOfScope(scopeText(input)) ? "recusou chamado fora do escopo de TI" : "montou o chamado"),
   tool: createTool({
     id: "open-ticket",
     description: "Abre um chamado. Preencha o que o funcionário JÁ disse (título, descrição, tipo, categoria); deixe vazio o que não tiver certeza. Se faltar algo, a tool faz a pergunta ao funcionário e a conversa pausa até ele responder (não chame report-decision antes dela). Ao final ela classifica a prioridade, verifica duplicidade e devolve um rascunho para confirmação.",
@@ -65,6 +71,11 @@ export const openTicket: ToolSpec<OpenInput, FlowOutcomeOutput | undefined> = {
     execute: async (input, context) => {
       const ctx = turnContext(context);
       const { suspend, suspendPayload: suspended, resumeData: answer } = hitl<SuspendPrompt, ResumeAnswer>(context);
+      if (!suspended) {
+        // Só na primeira execução (não na retomada): assunto claramente de RH/financeiro/facilities não vira chamado.
+        const scope = detectOutOfScope(scopeText(input));
+        if (scope) return { refused: "OUT_OF_SCOPE", scope, message: outOfScopeMessage(scope) };
+      }
       let data: FlowData = { ...(suspended?.data ?? prefill(input)) };
       let from = 0;
 
@@ -93,6 +104,7 @@ export const openTicket: ToolSpec<OpenInput, FlowOutcomeOutput | undefined> = {
   }),
   summarize: (input, out) => {
     if (!out) return undefined;
+    if ("refused" in out) return `assunto de ${out.scope.domain} ("${out.scope.term}"); orientou a procurar ${out.scope.redirect}`;
     const keys = Object.keys(prefill(input)).filter((k) => k !== "force_new" && k !== "related_hint");
     const base = keys.length ? `pré-preenchido: ${keys.join(", ")}` : "sem pré-preenchimento";
     return input.relatedTicketId ? `${base}; indicou ${input.relatedTicketId.toUpperCase()} como o mesmo problema` : base;

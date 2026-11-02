@@ -192,3 +192,25 @@ test("sistema legado fora ao confirmar: pedido vai para a fila, é registrado qu
   await processActionQueue({ now: later(20) });
   assert.equal(listTickets({ requesterId: "emp-ana" }).filter((t) => t.title === "Mouse sem fio não pareia").length, 1);
 });
+
+test("fora do escopo de TI: open-ticket recusa sem perguntar nem gravar; o agent orienta", async () => {
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  const before = listTickets({ requesterId: "emp-ana" }).length;
+  const runner = scriptedRunner(async (_p, tool) => {
+    const out = (await tool("open-ticket", { title: "Férias não apareceram no holerite", description: "Tirei férias em outubro e o holerite veio sem o valor.", type: "REQ", category: "Outros" })) as { refused?: string; message?: string };
+    assert.equal(out.refused, "OUT_OF_SCOPE");
+    assert.match(out.message ?? "", /RH/);
+    await tool("report-decision", { understanding: "dúvida de folha de pagamento", action: "orientei a procurar o RH", confidence: "alta", reasoning: "Anexo A: só TI" });
+    return "Isso é com o RH: fale com o portal de RH ou rh@nexo.com.";
+  });
+  const r = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "minhas férias não apareceram no holerite" }, runner });
+  const c = getConversation(conv.id)!;
+  assert.equal(c.suspendedRun, null);
+  assert.equal(c.pendingAction, null);
+  assert.equal(c.activeFlow, null);
+  assert.equal(listTickets({ requesterId: "emp-ana" }).length, before);
+  const action = r.messages[0]!.trace!.actions.find((a) => a.tool === "open-ticket")!;
+  assert.equal(action.label, "recusou chamado fora do escopo de TI");
+  assert.equal(action.status, "done");
+  assert.match(action.summary ?? "", /assunto de RH/);
+});

@@ -128,6 +128,41 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX idx_action_queue_due ON action_queue(status, next_attempt_at);
     `,
   },
+  {
+    version: 4,
+    sql: `
+      -- Sugestões da central de ajuda feitas pelo agent e a resposta do funcionário (acerto/erro por artigo).
+      CREATE TABLE help_feedback (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
+        employee_id TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('article','resolution')),
+        source_id TEXT NOT NULL,
+        problem TEXT NOT NULL,
+        outcome TEXT NOT NULL CHECK (outcome IN ('pending','resolved','not_resolved','analyst','unclear')),
+        employee_text TEXT,
+        ticket_id TEXT,
+        suggested_at TEXT NOT NULL,
+        answered_at TEXT
+      );
+      CREATE INDEX idx_help_feedback_source ON help_feedback(source, source_id);
+      CREATE INDEX idx_help_feedback_conv ON help_feedback(conversation_id, suggested_at);
+
+      -- Memória de resolução: o que o analista escreveu ao resolver um chamado, pesquisável junto dos artigos.
+      -- Só título, tipo, categoria e solução: descrição e atualizações do chamado nunca entram (privacidade, Anexo A).
+      CREATE TABLE resolution_memories (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL UNIQUE REFERENCES tickets(id),
+        type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        solution TEXT NOT NULL,
+        tried_article_ids TEXT NOT NULL DEFAULT '[]',
+        resolved_by TEXT NOT NULL,
+        resolved_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 let db: DatabaseSync | undefined;

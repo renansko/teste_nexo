@@ -1,6 +1,6 @@
 # NexoAssistant
 
-Persona "Nexo Assist". Código: `src/assistants/nexo/persona.ts`, `instructions.ts`, `tools/*`, `flows/openTicket.ts`, `actions.ts`, `payload.ts`, `seed.ts`.
+Persona "Nexo Assist". Código: `src/assistants/nexo/persona.ts`, `instructions.ts`, `tools/*`, `flows/openTicket.ts`, `actions.ts`, `scope.ts`, `payload.ts`, `seed.ts`.
 
 ## Tools (nome que o modelo vê → rótulo no trace)
 
@@ -10,7 +10,7 @@ Persona "Nexo Assist". Código: `src/assistants/nexo/persona.ts`, `instructions.
 | `cite-articles` (oculta) | — | payload `articles` só com os artigos que o agent usou (máx. 2, ids conferidos); nenhum se nada se aplica |
 | `list-my-tickets` | consultou seus chamados / verificou se já existe chamado parecido | `purpose=show` (padrão): payload `tickets` + opções (até 4; "Falar com um analista" se há vencido). `purpose=check`: só para o agent checar duplicidade, sem payload |
 | `get-my-ticket` | consultou o chamado X | payload `ticket` com updates; opção de analista se vencido |
-| `open-ticket` | montou o chamado | HITL: pré-preenche título/descrição/tipo/categoria, pergunta o resto suspendendo a run e devolve `{ outcome }` com o rascunho; `forceNew` ignora duplicidade; `relatedTicketId` = chamado que o agent julga ser o mesmo problema (pega paráfrases), conferido pelo flow |
+| `open-ticket` | montou o chamado / recusou chamado fora do escopo de TI | HITL: pré-preenche título/descrição/tipo/categoria, pergunta o resto suspendendo a run e devolve `{ outcome }` com o rascunho; `forceNew` ignora duplicidade; `relatedTicketId` = chamado que o agent julga ser o mesmo problema (pega paráfrases), conferido pelo flow. Antes de tudo, na primeira execução, `detectOutOfScope` (`scope.ts`) pode devolver `{ refused: "OUT_OF_SCOPE" }` ([ServiceDeskRules](../conventions/ServiceDeskRules.md)) |
 | `add-ticket-update` | preparou complemento do chamado X | `requiresConfirmation` → rascunho `update-ticket` |
 | `reopen-ticket` | preparou reabertura do chamado X | `requiresConfirmation`; só resolvidos ≤ 7 dias |
 | `transfer-to-analyst` | transferiu para um analista | `afterEffects` transfer com motivo e resumo |

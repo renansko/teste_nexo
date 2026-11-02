@@ -30,5 +30,5 @@ Crítica 1 h corrida; Alta 4 h úteis; Média 3 dias úteis; Baixa 5 dias úteis
 
 - Transferência: pedido do funcionário, crítico, vencido, baixa confiança (`transfer-to-analyst`); crítico criado → transferência automática; duas respostas seguidas com confiança baixa → transferência automática pelo engine ([DecisionTrace](../entities/DecisionTrace.md)).
 - Privacidade: 404 para chamado de outro funcionário.
-- Escopo só TI: regra de prompt (sem tool); fora de escopo o agent orienta e não abre chamado.
+- Escopo só TI, em duas camadas: instrução (o agent orienta e não abre chamado) e guarda determinística em `open-ticket` (`src/assistants/nexo/scope.ts`, `detectOutOfScope`): sinal forte de RH/financeiro/facilities sem nenhum sinal de TI → `{ refused: "OUT_OF_SCOPE" }`, nada é perguntado nem gravado, e a ação aparece no trace como "recusou chamado fora do escopo de TI". Conservadora: qualquer sinal de TI prevalece; na dúvida deixa passar. Testes: `scope.test.ts`, `flows/openTicket.test.ts`. Próximo passo: classificador com confiança (`NEXO_FAST_MODEL`).
 - Limite de 30 mensagens do funcionário por conversa (`NEXO_MESSAGE_LIMIT`).

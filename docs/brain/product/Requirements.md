@@ -17,7 +17,13 @@ TypeScript estrito; Mastra; qualquer LLM com justificativa; UI pelo protótipo (
 
 Regras do service desk: [ServiceDeskRules](../conventions/ServiceDeskRules.md). Dados de exemplo: `src/assistants/nexo/seed.ts`.
 
+## Validação contra o PRD (2026-11-01)
+
+Todos os itens obrigatórios ("O que construir" 1–7, requisitos técnicos, Anexos A e B) têm código e teste; ver [ServiceDeskRules](../conventions/ServiceDeskRules.md), [Turn](../functions/Turn.md), [FrontendUI](../conventions/FrontendUI.md), [AnalystConsoleApi](../functions/AnalystConsoleApi.md). Escopo só TI deixou de ser só prompt: guarda `detectOutOfScope` em `open-ticket`.
+
 ## Pendências
 
-- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista ([FrontendUI](../conventions/FrontendUI.md), [AnalystConsoleApi](../functions/AnalystConsoleApi.md)). O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: painel expansível nos passos ([DecisionTrace](../entities/DecisionTrace.md)).
-- Deploy (diferencial) não feito.
+- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista. O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: painel expansível nos passos ([DecisionTrace](../entities/DecisionTrace.md)). Fidelidade visual conferida à mão; em larguras intermediárias (720–1000 px) o rodapé do console já quebra os botões em linha própria.
+- "Transferir chamados" no serviço simulado (item 4 do PRD): `updateTicketStatus` existe em `ticketService.ts` mas nada o chama; transferir a conversa não muda o chamado vinculado para "Aguardando analista" (status só via seed). Em avaliação se vale ligar os dois.
+- Deploy (diferencial) não feito; em avaliação. Dockerfile e compose prontos ([README](../../../README.md)).
+- Escopo: a guarda é lexical e conservadora; classificador com confiança fica como próximo passo ([NexoAssistant](../services/NexoAssistant.md)).
