@@ -12,6 +12,7 @@ Registro do que o assistente fez e por quê, gravado em `messages.trace` e emiti
 ## Invariantes
 
 - Tools internas (`suggest-quick-replies`, `report-decision`, `confirm/cancel-pending-action`) são `hidden`: não geram ação no trace.
+- Tools `quiet` (hoje só `search-help-center`) geram ação com `quiet: true`: ficam no trace, no "Por quê?" e no console, mas o chat do funcionário não as lista acima da resposta (consulta de rotina não é informação para ele; o que importa são os artigos citados).
 - Uma tool nunca lança para dentro do modelo: erro vira `{ error: code, message }` como resultado, ação com `status: error` e nota.
 - Evento SSE `action` é emitido duas vezes por ação (pending e final) com o **mesmo id**.
 - `confidence: baixa` sem transferência/rascunho/flow → engine acrescenta a opção "Falar com um analista" e registra nota. Se a resposta anterior do assistente também foi `baixa`, o engine transfere sozinho (`transferReason: low_confidence`, resumo com o entendimento e o porquê) e remove as opções: o caso aparece no console como "Agent pediu ajuda".

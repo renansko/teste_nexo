@@ -13,6 +13,7 @@ type Hit = { id: string; title: string; body: string; category: string };
 
 export const searchHelpCenter: ToolSpec<{ query: string }, Hit[]> = {
   label: "buscou na central de ajuda",
+  quiet: true, // consulta de rotina: o funcionário vê a resposta (e os artigos citados), não o passo
   tool: createTool({
     id: "search-help-center",
     description:

@@ -94,6 +94,7 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
  * `live`: turno em andamento (SSE), onde `pending` significa "executando" (spinner). Numa mensagem gravada,
  * `pending` é uma tool que parou para perguntar ao funcionário: ícone estático de pergunta.
  * `trace`: decisão gravada; quando tem detalhes, mostra o "Por quê?".
+ * Passos `quiet` (consultas de rotina, ex.: busca na central) não entram na linha de status; seguem no "Por quê?".
  */
 function AgentMessage(props: {
   who: string;
@@ -112,7 +113,7 @@ function AgentMessage(props: {
         <span className={styles.who} data-analyst={props.analyst}>
           {props.who}
         </span>
-        {props.actions?.map((a) => (
+        {props.actions?.filter((a) => !a.quiet).map((a) => (
           <span key={a.id} className={styles.step} data-status={a.status} title={a.summary}>
             {a.status === "pending" ? (
               props.live ? (

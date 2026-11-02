@@ -73,6 +73,7 @@ function wrapTool(spec: ToolSpec, collector: TurnCollector, emit: (e: ChatEvent)
         label: typeof spec.label === "function" ? spec.label(input) : spec.label,
         status: "pending",
         input,
+        ...(spec.quiet ? { quiet: true as const } : {}),
       };
       const started = Date.now();
       const position = collector.actions.length; // a ação da tool precede as ações sintéticas que ela registrar

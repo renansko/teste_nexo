@@ -40,6 +40,8 @@ export interface TraceAction {
   label: string;
   status: ActionStatus;
   summary?: string;
+  /** Passo interno (busca na central): não entra na linha de status do chat. */
+  quiet?: true;
 }
 export type Confidence = "alta" | "media" | "baixa";
 export interface Decision {
@@ -188,7 +190,8 @@ export interface AnalystConversation extends Conversation {
 export interface AnalystConversationDetail {
   conversation: AnalystConversation;
   messages: ChatMessage[];
-  tickets: TicketView[];
+  /** `null`: sistema de chamados indisponível no momento (a conversa carrega mesmo assim; o polling tenta de novo). */
+  tickets: TicketView[] | null;
 }
 
 type AnalystMutation = { conversation: AnalystConversation; messages: RawMessage[] };
@@ -201,7 +204,7 @@ const mutate = async (id: string, action: string, body = "{}") => {
 export const analystApi = {
   list: (q?: string) => request<AnalystConversation[]>(`/api/analyst/conversations${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   async get(id: string): Promise<AnalystConversationDetail> {
-    const d = await request<{ conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] }>(analystPath(id));
+    const d = await request<{ conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] | null }>(analystPath(id));
     return { conversation: d.conversation, messages: d.messages.map(toMessage), tickets: d.tickets };
   },
   take: (id: string) => mutate(id, "/take"),

@@ -5,7 +5,7 @@ Console do analista (role `analyst`). Código: `src/app/api/analyst/**`, transi�
 ## Rotas
 
 - `GET /api/analyst/conversations?state=&q=` → `AnalystConversationItem[]` = `PublicConversation` + `employee {id,name,email,department}`, `analyst {id,name} | null`, `lastMessage` (última fala; mensagem de sistema só se não houver fala), `waitingSince` (só em `waiting_analyst`). Ordem: aguardando → em atendimento → com agent → encerradas; `q` busca em nome/e-mail/chamado/resumo/última mensagem.
-- `GET /api/analyst/conversations/:id` → `{ conversation, messages (com trace), employee, tickets: TicketView[] }` (painel do funcionário).
+- `GET /api/analyst/conversations/:id` → `{ conversation, messages (com trace), employee, tickets: TicketView[] | null }` (painel do funcionário). `tickets: null` = sistema de chamados indisponível após retries ([LegacyOutage](../conventions/LegacyOutage.md)); a conversa carrega mesmo assim e o console mostra o aviso só no painel.
 - `POST .../:id/take` → assume (`analyst`); `POST .../:id/messages {text}` → responde; `POST .../:id/return` → devolve ao agent; `POST .../:id/close` → encerra. Todas devolvem `{ conversation, messages }` com as mensagens de sistema/analista criadas.
 - `GET /api/analyst/employees/:id/tickets` → `{ employee, tickets }`.
 

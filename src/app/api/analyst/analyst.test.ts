@@ -5,6 +5,7 @@ import { as, call } from "@/test/api";
 import { scriptedRunner } from "@/test/scriptedRunner";
 import { setDefaultRunner } from "@/engine/conversation/turn";
 import { createConversation, updateConversation } from "@/services/conversations/conversationService";
+import { legacyGateway } from "@/services/tickets/legacyGateway";
 import { GET as list } from "./conversations/route";
 import { GET as detail } from "./conversations/[id]/route";
 import { POST as take } from "./conversations/[id]/take/route";
@@ -43,6 +44,14 @@ test("fluxo completo: transferência → lista → assumir → responder → fun
   const d = await call(detail, { headers: fabio(), params: { id: conv.id } });
   assert.equal(d.json.tickets.length, 3);
   assert.equal(d.json.messages.find((m: any) => m.role === "agent").trace.actions[0].label, "transferiu para um analista");
+
+  // Sistema de chamados fora do ar: a conversa carrega mesmo assim, só o painel vem como null.
+  legacyGateway.configure({ rate: 1, durationMs: 60_000, now: () => 0 });
+  const degraded = await call(detail, { headers: fabio(), params: { id: conv.id } });
+  assert.equal(degraded.status, 200);
+  assert.equal(degraded.json.tickets, null);
+  assert.equal(degraded.json.messages.length, d.json.messages.length);
+  legacyGateway.configure({ rate: 0 });
 
   // Assumir: agent pausado; outro analista não pode assumir nem responder.
   const t = await call(take, { headers: fabio(), params: { id: conv.id } });

@@ -139,6 +139,7 @@ test("busca na central sem artigo aplicável: nenhum card; com artigo citado, s�
   const r1 = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "Meu mouse parou de funcionar" }, runner: semArtigo });
   assert.equal((r1.messages[0]!.payload ?? []).some((p) => p.kind === "articles"), false);
   assert.equal(r1.messages[0]!.trace!.actions[0]!.label, "buscou na central de ajuda");
+  assert.equal(r1.messages[0]!.trace!.actions[0]!.quiet, true); // fica no trace, mas o chat não anuncia o passo
 
   const comArtigo = scriptedRunner(async (_p, tool) => {
     await tool("search-help-center", { query: "impressora não imprime" });

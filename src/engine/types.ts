@@ -30,6 +30,8 @@ export interface TraceAction {
   input?: unknown;
   summary?: string;
   durationMs?: number;
+  /** Passo interno (ex.: busca na central): fica no trace, mas o chat do funcionário não o lista acima da resposta. */
+  quiet?: true;
 }
 
 export interface Decision {
@@ -195,6 +197,8 @@ export interface ToolSpec<TIn = any, TOut = any> {
   requiresConfirmation?: boolean;
   /** Tools internas do engine não aparecem como ação no trace. */
   hidden?: boolean;
+  /** Consulta interna: entra no trace (analista, "Por quê?"), mas o chat do funcionário não a anuncia acima da resposta. */
+  quiet?: boolean;
 }
 
 /** Output de uma tool que inicia um flow determinístico. */

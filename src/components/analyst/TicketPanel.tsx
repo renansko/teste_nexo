@@ -15,7 +15,10 @@ function deadline(t: TicketView): React.ReactNode {
   return `Prazo: ${t.slaLabel}, até ${formatDateTime(t.dueAt)}`;
 }
 
-/** Painel "Chamados do funcionário": o da conversa em destaque e os demais, expansíveis. */
+/**
+ * Painel "Chamados do funcionário": o da conversa em destaque e os demais, expansíveis.
+ * `tickets === null`: sistema de chamados indisponível; só o painel degrada, a conversa segue visível.
+ */
 export function TicketPanel({
   employeeName,
   tickets,
@@ -23,14 +26,15 @@ export function TicketPanel({
   onClose,
 }: {
   employeeName: string;
-  tickets: TicketView[];
+  tickets: TicketView[] | null;
   currentId: string | null;
   onClose: () => void;
 }) {
   const [expanded, setExpanded] = useState<string>();
-  const current = tickets.find((t) => t.id === currentId);
-  const others = tickets.filter((t) => t.id !== currentId);
-  const open = tickets.filter((t) => OPEN.has(t.status)).length;
+  const list = tickets ?? [];
+  const current = list.find((t) => t.id === currentId);
+  const others = list.filter((t) => t.id !== currentId);
+  const open = list.filter((t) => OPEN.has(t.status)).length;
   const first = firstName(employeeName);
 
   return (
@@ -39,13 +43,22 @@ export function TicketPanel({
         <div className={styles.who}>
           <strong>Chamados de {first}</strong>
           <span>
-            {open} {open === 1 ? "aberto" : "abertos"} · {tickets.length - open} {tickets.length - open === 1 ? "encerrado" : "encerrados"}
+            {tickets === null
+              ? "indisponível no momento"
+              : `${open} ${open === 1 ? "aberto" : "abertos"} · ${list.length - open} ${list.length - open === 1 ? "encerrado" : "encerrados"}`}
           </span>
         </div>
         <button type="button" className={styles.iconBtn} onClick={onClose} aria-label="Fechar painel de chamados">
           <X size={18} aria-hidden />
         </button>
       </header>
+      {tickets === null ? (
+        <div className={styles.ticketsBody}>
+          <p className={styles.ticketMeta} role="status">
+            Sistema de chamados temporariamente indisponível. Os chamados de {first} aparecem aqui assim que ele voltar.
+          </p>
+        </div>
+      ) : (
       <div className={styles.ticketsBody}>
         {current && (
           <section>
@@ -109,6 +122,7 @@ export function TicketPanel({
           )}
         </section>
       </div>
+      )}
     </aside>
   );
 }

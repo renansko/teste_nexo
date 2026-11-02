@@ -23,3 +23,5 @@
 - 2026-11-01 | front | RichText: Markdown leve das respostas (negrito, itálico, código, listas) renderizado no chat.
 - 2026-11-01 | persona | Central de ajuda sempre oferece 'Abrir um chamado'; instrução para seguir ao chamado quando o artigo não resolve.
 - 2026-11-01 | merge | HITL + outbox/duplicidade/console na mesma base: `open-ticket` (HITL) absorve `relatedTicketId` e substitui `start-open-ticket-flow`; migração 3 (idempotency_key, action_queue); busca na central devolve só a opção 'Abrir um chamado' (artigos via cite-articles); payload do resultado do chat-formulário acompanha o rascunho.
+- 2026-11-01 | analista | Detalhe da conversa degrada só o painel de chamados (tickets: null) quando o legado está indisponível.
+- 2026-11-01 | front | Passos `quiet` no trace: busca na central some da linha de status do chat (segue no "Por quê?" e no console).
