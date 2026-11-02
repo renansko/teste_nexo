@@ -11,14 +11,27 @@ npm install && npm run dev   # http://localhost:3000 (Node 22.5+; SQLite criado 
 
 ```mermaid
 flowchart LR
-    Env[".env.local com as 2 chaves"] --> Dev["npm run dev ou docker compose up --build"]
-    Dev --> Func["/ funcionário: ana.souza@nexo.com"]
-    Dev --> Ana["/atendente analista: fabio.nunes@nexo.com"]
-    Func --> Chat["chat com cards, rascunhos e passos do agent"]
-    Ana --> Console["console: filas, assumir, responder, resolver"]
+    Env[".env.local<br/>com as 2 chaves"] --> Dev["npm run dev<br/>ou docker compose up"]
+    Dev --> Func["/<br/>funcionário"]
+    Dev --> Ana["/atendente<br/>analista"]
+    Func --> Chat["chat: cards, rascunhos<br/>e passos do agent"]
+    Ana --> Console["console: filas, assumir,<br/>responder, resolver"]
 ```
 
-- Qualquer senha. Outros funcionários: `bruno.lima`, `carla.mendes`, `diego.rocha`, `elisa.martins` (`@nexo.com`); outra analista: `gabriela.castro`.
+**Logins de teste** (dados de exemplo do seed, fictícios; **a senha é qualquer texto**):
+
+| Papel | E-mail | Entra em |
+|---|---|---|
+| Funcionário (Financeiro) | `ana.souza@nexo.com` | `/` chat com o assistente |
+| Funcionário (Vendas) | `bruno.lima@nexo.com` | `/` |
+| Funcionário (Marketing) | `carla.mendes@nexo.com` | `/` |
+| Funcionário (Engenharia) | `diego.rocha@nexo.com` | `/` |
+| Funcionário (Pessoas) | `elisa.martins@nexo.com` | `/` |
+| **Analista** (Suporte N1) | `fabio.nunes@nexo.com` | `/atendente` console do analista |
+| **Analista** (Suporte N2) | `gabriela.castro@nexo.com` | `/atendente` |
+
+Para ver o fluxo completo, abra duas abas (ou uma janela anônima): funcionário no chat e analista no console. O login decide a tela pelo papel; um analista que abrir `/` é levado ao console.
+
 - Docker: `cp .env.example .env`, preencha as chaves, `docker compose up --build` (volume `nexo-data` guarda o banco).
 - `npm test` (sem rede) · `npm run typecheck` · `npm run seed` recria os dados de exemplo · `npm run load` simula 2.000 funcionários sem custo de modelo (seção 7).
 
@@ -31,28 +44,28 @@ flowchart LR
 ```mermaid
 graph LR
     subgraph UI["Front (Next.js)"]
-        Chat["Chat do funcionário (SSE)"]
-        Console["Console do analista (polling)"]
+        Chat["Chat do funcionário<br/>(SSE)"]
+        Console["Console do analista<br/>(polling)"]
     end
-    subgraph Engine["src/engine — genérico, não conhece a Nexo"]
-        Turn["Turno: estado → run pausada → rascunho → flow → validação → agent"]
-        Tools["Tools com trace, HITL, outbox"]
+    subgraph Engine["src/engine: genérico, não conhece a Nexo"]
+        Turn["Turno: estado, run pausada,<br/>rascunho, flow, validação, agent"]
+        Tools["Tools com trace,<br/>HITL, outbox"]
     end
-    subgraph Persona["src/assistants/nexo — regras do Anexo A"]
-        Instr["Instruções + tools + executores + hooks"]
+    subgraph Persona["src/assistants/nexo: regras do Anexo A"]
+        Instr["Instruções, tools,<br/>executores, hooks"]
     end
-    subgraph Services["src/services — sem LLM"]
-        Tickets["Chamados (legado simulado, cai às vezes)"]
-        Help["Central: artigos + soluções de analistas"]
+    subgraph Services["src/services: sem LLM"]
+        Tickets["Chamados<br/>(legado simulado)"]
+        Help["Central: artigos +<br/>soluções de analistas"]
         Conv["Conversas"]
     end
-    LLM["LLM via model router do Mastra (NEXO_MODEL)"]
+    LLM["LLM via model router<br/>(NEXO_MODEL)"]
     Chat --> Turn
     Console --> Conv
     Turn --> Tools --> Instr
     Turn --> LLM
     Instr --> Tickets & Help & Conv
-    Services --> DB[("SQLite nexo.db + mastra.db")]
+    Services --> DB[("SQLite<br/>nexo.db + mastra.db")]
 ```
 
 `engine` nunca importa `assistants/*`; a persona importa `engine` e `services`; `services` não sabe o que é agent. O agent só vê dados por tools, e as tools recebem o usuário logado pelo `requestContext`: privacidade garantida no código, não no prompt. Contratos e invariantes em [docs/brain/index.md](docs/brain/index.md).
@@ -63,20 +76,20 @@ Cada mensagem passa por `src/engine/conversation/turn.ts` nesta ordem ([Turn](do
 
 ```mermaid
 flowchart TD
-    Msg([Mensagem do funcionário]) --> Estado{Conversa com analista, encerrada ou no limite?}
-    Estado -- sim --> Grava["Grava e não responde (ou 409)"]
-    Estado -- não --> Run{Run pausada numa pergunta?}
-    Run -- sim --> Resume["Retoma a run de onde parou (resumeStream)"]
-    Run -- não --> Rasc{Rascunho pendente?}
-    Rasc -- Confirmar --> Outbox["Executa sem LLM via outbox"]
-    Rasc -- Editar X --> Flow["Chat-formulário reabre a pergunta X"]
-    Rasc -- "texto livre ou sem rascunho" --> Val{"Tem conteúdo útil? (regex, sem LLM)"}
-    Val -- "não: 'A', '???', 'aaaa', '123'" --> Regra["Responde por regra com atalhos"]
-    Val -- sim --> Agent["Agent: 20 msgs + contexto curto + tools"]
-    Agent --> Dec["report-decision obrigatória: entendeu, fez, segurança, por quê"]
-    Dec --> Baixa{Segurança baixa?}
-    Baixa -- 1ª vez --> Oferece["Oferece 'Falar com um analista'"]
-    Baixa -- 2ª seguida --> Transfere["Transfere sozinho ('Agent pediu ajuda')"]
+    Msg(["Mensagem<br/>do funcionário"]) --> Estado{"Com analista, encerrada<br/>ou no limite?"}
+    Estado -- sim --> Grava["Grava e não<br/>responde (ou 409)"]
+    Estado -- não --> Run{"Run pausada<br/>numa pergunta?"}
+    Run -- sim --> Resume["Retoma a run<br/>de onde parou"]
+    Run -- não --> Rasc{"Rascunho<br/>pendente?"}
+    Rasc -- Confirmar --> Outbox["Executa sem LLM<br/>via outbox"]
+    Rasc -- Editar X --> Flow["Chat-formulário<br/>reabre a pergunta X"]
+    Rasc -- "texto livre<br/>ou sem rascunho" --> Val{"Tem conteúdo útil?<br/>(regex, sem LLM)"}
+    Val -- "não: 'A', '???', 'aaaa'" --> Regra["Responde por regra<br/>com atalhos"]
+    Val -- sim --> Agent["Agent: 20 msgs,<br/>contexto curto, tools"]
+    Agent --> Dec["report-decision:<br/>entendeu, fez,<br/>segurança, por quê"]
+    Dec --> Baixa{"Segurança<br/>baixa?"}
+    Baixa -- "1ª vez" --> Oferece["Oferece 'Falar<br/>com um analista'"]
+    Baixa -- "2ª seguida" --> Transfere["Transfere sozinho<br/>('Agent pediu ajuda')"]
 ```
 
 Tools: `search-help-center`, `cite-articles`, `suggest-help-article`, `list-my-tickets`, `get-my-ticket`, `open-ticket`, `add-ticket-update`, `reopen-ticket`, `transfer-to-analyst`, mais `suggest-quick-replies` e `report-decision`.
@@ -89,12 +102,12 @@ O PRD coloca aqui o centro do desafio, e foi onde o esforço se concentrou. Prin
 
 ```mermaid
 flowchart LR
-    M([Mensagem]) --> G{"inputGuard: regex e contagem<br/>'A', '???', 'aaaa', '123'"}
-    G -- barrada --> R0["Resposta por regra + atalhos<br/>0 chamadas"]
-    G -- ok --> P{"Resposta a pergunta, rascunho<br/>ou clique em opção?"}
-    P -- sim --> R1["Só a tool ou o executor roda<br/>0 chamadas"]
-    P -- não --> LLM["1 run do agent: tools + report-decision<br/>instruções estáveis em cache, janela de 20 msgs, maxSteps 6"]
-    LLM --> D["Prioridade, prazo, duplicidade, escopo, privacidade:<br/>regra confere o que a IA propôs"]
+    M(["Mensagem"]) --> G{"Regex e contagem<br/>'A', '???', 'aaaa'"}
+    G -- barrada --> R0["Resposta por regra<br/>+ atalhos: 0 chamadas"]
+    G -- ok --> P{"Resposta a pergunta,<br/>rascunho ou opção?"}
+    P -- sim --> R1["Só a tool ou<br/>o executor: 0 chamadas"]
+    P -- não --> LLM["1 run do agent<br/>tools + report-decision<br/>cache, 20 msgs, maxSteps 6"]
+    LLM --> D["Regra confere:<br/>prioridade, prazo,<br/>duplicidade, escopo"]
 ```
 
 Onde o custo foi cortado, do mais frequente ao mais raro:
@@ -205,15 +218,15 @@ Só o engine e o analista mudam o estado; só em `agent` o assistente responde. 
 
 ```mermaid
 flowchart TD
-    C([Confirmar]) --> Tx["Transação: rascunho sai, action_queue = processing"]
-    Tx --> Exec["Executor sem LLM, idempotencyKey = id do rascunho"]
-    Exec --> R{Resultado}
-    R -- ok --> Done["done: resposta na conversa, link-ticket, crítico transfere"]
-    R -- 503 legado fora --> Q["queued com backoff; worker a cada 5 s; 'aviso quando voltar'"]
-    R -- duplicado apareceu --> Dup["Vira rascunho de complemento (nova confirmação)"]
-    R -- erro de regra --> Fail["failed: rascunho volta com nova chave"]
+    C(["Confirmar"]) --> Tx["Transação: rascunho sai,<br/>action_queue = processing"]
+    Tx --> Exec["Executor sem LLM<br/>idempotencyKey = id do rascunho"]
+    Exec --> R{"Resultado"}
+    R -- ok --> Done["done: resposta, link-ticket,<br/>crítico transfere"]
+    R -- "503 legado fora" --> Q["queued com backoff<br/>worker a cada 5 s"]
+    R -- "duplicado apareceu" --> Dup["Vira rascunho<br/>de complemento"]
+    R -- "erro de regra" --> Fail["failed: rascunho volta<br/>com nova chave"]
     Q --> Exec
-    Crash["Processo caiu em processing > 2 min"] --> Q
+    Crash["Processo caiu em<br/>processing > 2 min"] --> Q
 ```
 
 - Chave de idempotência única em `tickets`/`ticket_updates`: reexecutar nunca grava duas vezes ([ActionQueue](docs/brain/services/ActionQueue.md)).
