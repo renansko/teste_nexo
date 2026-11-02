@@ -334,16 +334,18 @@ function Dock({
               : "Você pode assumir a qualquer momento; o agent fica em pausa."}
           </span>
         </div>
-        {waiting && (
-          <button type="button" className={styles.btn} disabled={!!busy} onClick={() => onAction("giveBack")}>
-            <Undo2 size={15} aria-hidden />
-            {busy === "giveBack" ? "Devolvendo…" : "Devolver ao agent"}
+        <div className={styles.dockActions}>
+          {waiting && (
+            <button type="button" className={styles.btn} disabled={!!busy} onClick={() => onAction("giveBack")}>
+              <Undo2 size={15} aria-hidden />
+              {busy === "giveBack" ? "Devolvendo…" : "Devolver ao agent"}
+            </button>
+          )}
+          <button type="button" className={styles.btnPrimary} disabled={!!busy} onClick={() => onAction("take")}>
+            <UserRoundCheck size={16} aria-hidden />
+            {busy === "take" ? "Assumindo…" : "Assumir atendimento"}
           </button>
-        )}
-        <button type="button" className={styles.btnPrimary} disabled={!!busy} onClick={() => onAction("take")}>
-          <UserRoundCheck size={16} aria-hidden />
-          {busy === "take" ? "Assumindo…" : "Assumir atendimento"}
-        </button>
+        </div>
       </div>
       {locked("Assuma o atendimento para responder")}
     </div>
