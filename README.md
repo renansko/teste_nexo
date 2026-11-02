@@ -79,11 +79,54 @@ flowchart TD
 
 Tools: `search-help-center`, `cite-articles`, `suggest-help-article`, `list-my-tickets`, `get-my-ticket`, `open-ticket`, `add-ticket-update`, `reopen-ticket`, `transfer-to-analyst`, mais `suggest-quick-replies` e `report-decision`.
 
-**Validação antes do modelo** ([InputPolicy](docs/brain/conventions/InputPolicy.md)): só o texto livre que iria ao agent passa por `src/engine/conversation/inputGuard.ts`. Um caractere solto ("A"), só símbolos ou emoji ("???"), repetição ("aaaa") ou só números ("123") recebem resposta por regra com atalhos ("Abrir um chamado", "Falar com um analista") e o modelo não é chamado. Antes, uma mensagem "A" custava duas chamadas ao modelo (texto + `report-decision`) para responder "não entendi". Respostas a perguntas do chat-formulário, do rascunho e da run pausada ("1", "ok", "sim") nunca passam pela guarda. A política é da persona (`inputPolicy`) e o composer aplica a mesma função antes de enviar.
+O modelo só entra na última caixa. Tudo antes dela é regra: estado, run pausada, rascunho e a validação da mensagem. A seção seguinte mostra onde isso corta custo.
 
-**O que não fica com o modelo** ([ServiceDeskRules](docs/brain/conventions/ServiceDeskRules.md)): validação da mensagem, prioridade (impacto × urgência), prazo em horas úteis, duplicidade e reabertura, privacidade, confirmação de toda escrita, escopo (`open-ticket` recusa pedido com sinal claro de RH/financeiro/facilities e nenhum de TI), transferência automática de chamado crítico e o escalonamento por confiança acima. Lista completa, ponto a ponto, na [seção 10](#10-pontos-de-decisão-regra--ia).
+## 4. Decisões de IA e custo
 
-## 4. Fluxo ponta a ponta: resolver ou abrir chamado
+Princípio: **a IA decide só o que exige entender linguagem** (qual é o problema, qual artigo se aplica, como conduzir). Tudo que é fato, regra do Anexo A ou efeito colateral é código determinístico, testado e com custo zero de modelo. Nos pontos mistos a IA propõe e a regra confere.
+
+```mermaid
+flowchart LR
+    M([Mensagem]) --> G{"inputGuard: regex e contagem<br/>'A', '???', 'aaaa', '123'"}
+    G -- barrada --> R0["Resposta por regra + atalhos<br/>0 chamadas"]
+    G -- ok --> P{"Resposta a pergunta, rascunho<br/>ou clique em opção?"}
+    P -- sim --> R1["Só a tool ou o executor roda<br/>0 chamadas"]
+    P -- não --> LLM["1 run do agent: tools + report-decision<br/>instruções estáveis em cache, janela de 20 msgs, maxSteps 6"]
+    LLM --> D["Prioridade, prazo, duplicidade, escopo, privacidade:<br/>regra confere o que a IA propôs"]
+```
+
+Onde o custo foi cortado, do mais frequente ao mais raro:
+
+- **Validação da entrada por regex** ([InputPolicy](docs/brain/conventions/InputPolicy.md)): caractere solto, só símbolos ou emoji, repetição e só números recebem resposta por regra com "Abrir um chamado" / "Falar com um analista". Motivação medida no painel do provedor: uma mensagem "A" custava duas chamadas (texto + `report-decision`) para responder "não entendi". Conservadora: "oi", "ok", "vpn", "INC-20311" passam; palavras reais sem sentido vão ao modelo. O composer roda a mesma função e nem envia. A política é da persona (`inputPolicy`), não constante do código.
+- **Perguntas do chamado sem LLM**: impacto, urgência, afetados e "isso resolveu?" pausam a run; a resposta reexecuta só a tool. Um chamado completo custa uma run para extrair e uma para concluir, não uma por pergunta.
+- **Confirmar, cancelar, editar e cliques em opção** são interpretados por regra (opção clicada ou regex de texto curto); só texto ambíguo diante de um rascunho vai ao modelo.
+- **Prioridade, prazo, duplicidade, reabertura, escopo e privacidade** são código (`services/tickets/*`, `scope.ts`): o modelo nunca arbitra o Anexo A.
+- **Tipo e categoria sem classificador extra**: o agent pré-preenche o que o funcionário já disse; faltou, a tool pergunta com opções.
+- **Busca lexical** na central e nas soluções de analistas; **resumo do assistente** no console montado das mensagens já gravadas. Nenhuma chamada nova ao modelo.
+- **Limites**: 30 mensagens por conversa, janela de 20, `maxSteps` 6, instruções estáveis (nada de data ou usuário nelas) para o cache de prompt do provedor.
+
+| Ponto | Quem decide | Onde | Por quê |
+|---|---|---|---|
+| Mensagem tem conteúdo útil? | Regra (regex/contagem; política por persona) | `engine/conversation/inputGuard.ts`, `turn.ts` | Caractere solto ou símbolos custavam duas chamadas ao modelo para responder "não entendi". |
+| Conversa aceita mensagem? (encerrada, limite de 30, analista na conversa) | Regra | `turn.ts` | Estado é fato, não interpretação. |
+| "Confirmar", "cancelar", "editar X" diante do rascunho; cancelar uma pergunta | Regra (opção clicada ou regex de texto curto); texto ambíguo vai à IA com o rascunho no contexto | `engine/actions/pending.ts`, `engine/flows/runner.ts` | Confirmação de efeito colateral não pode depender de interpretação. |
+| Quais perguntas faltam para o chamado e em que ordem | Regra (passos do chat-formulário; a tool pergunta pausando a run) | `assistants/nexo/flows/openTicket.ts`, `tools/ticketActions.ts` | Responder às perguntas reexecuta só a tool: zero chamadas ao modelo. |
+| Tipo (INC/REQ) e categoria | IA pré-preenche quando o funcionário já disse; regra pergunta com opções quando falta | `tools/ticketActions.ts` | Sem LLM extra; uma pergunta a mais quando há dúvida. |
+| Prioridade e prazo | Regra (matriz impacto × urgência do Anexo A; horas/dias úteis) | `services/tickets/priority.ts`, `sla.ts` | Regra de negócio auditável; o modelo não arbitra prioridade. |
+| É duplicado ou reabertura? | IA indica o chamado relacionado quando reconhece paráfrase; regra confere em três camadas (flow, rascunho, transação) | `services/tickets/dedup.ts`, `ticketService.ts` | A IA cobre sinônimos a custo zero; a regra impede gravação dupla mesmo em paralelo. |
+| Assunto é de TI? | Instrução ao modelo + guarda lexical conservadora na `open-ticket` | `assistants/nexo/scope.ts` | Sinal claro de RH/financeiro/facilities nunca vira chamado; na dúvida o modelo decide. |
+| Quais chamados o funcionário pode ver | Regra (filtro por usuário em toda tool) | `tools/tickets.ts`, `services/tickets` | Privacidade no código, não no prompt. |
+| Criar, complementar ou reabrir chamado | Regra: só após "Confirmar", pelo outbox com chave de idempotência | `turn.ts`, `engine/actions/queue.ts` | Nenhum efeito colateral depende de o modelo "prometer". |
+| Transferir para analista | IA chama a tool (pedido, crítico, vencido, insegurança); regra transfere sozinha ao criar chamado crítico e após duas respostas seguidas com confiança baixa | `tools/transfer.ts`, `actions.ts`, `turn.ts` | O modelo reconhece o caso; o engine garante os casos do Anexo A sem depender dele. |
+| "Isso resolveu?" | Regra para clique e respostas claras; IA lê o texto quando ambíguo (`unclear`) | `tools/helpCenter.ts` | Métrica de resolução sem gastar modelo nos casos óbvios. |
+| Buscar na central e nas soluções de analistas | Regra (busca lexical: título > tags > corpo) | `services/helpCenter/helpCenterService.ts` | Determinística e suficiente para dezenas de itens; embeddings quando a base crescer. |
+| Qual artigo se aplica e o que dizer ao funcionário | IA | `instructions.ts`, tools `suggest-help-article` / `cite-articles` | É o trabalho do modelo: entender o problema e conduzir. |
+| Entender o problema, pedir detalhes, redigir a resposta | IA | `instructions.ts` | Idem; as instruções limitam o tom e proíbem inventar status e procedimentos. |
+| Confiança da resposta | IA declara (`report-decision`, categórica); regra usa como gatilho de segurança | `engine/tools/wrap.ts`, `turn.ts` | Autodeclaração não é calibrada, por isso vira categoria e gatilho, não percentual. |
+
+**Em escala.** A validação é configuração da persona (`AssistantConfig.inputPolicy`: mínimo de caracteres, só números ou não, classe de caracteres, dica, atalhos) e o cliente recebe a mesma política em `conversation.inputPolicy`. Como produto vira um registro por tenant com tela de administração (a mesma tabela de personas prevista em multi-persona), e as notas do trace (`entrada sem conteúdo útil (<motivo>)`) medem quantas mensagens foram barradas e por quê, para ajustar a política sem tocar em código.
+
+## 5. Fluxo ponta a ponta: resolver ou abrir chamado
 
 ```mermaid
 sequenceDiagram
@@ -113,7 +156,7 @@ sequenceDiagram
 
 Perguntas intermediárias não chamam o LLM. "Resolveu" encerra sem chamado e grava o acerto do artigo ([HelpFeedback](docs/brain/entities/HelpFeedback.md)); a solução que o analista escreve ao resolver vira memória pesquisável, só título, categoria e solução ([ResolutionMemory](docs/brain/entities/ResolutionMemory.md)). Detalhes: [HumanInTheLoop](docs/brain/services/HumanInTheLoop.md), [PendingAction](docs/brain/services/PendingAction.md).
 
-## 5. Estados e dados
+## 6. Estados e dados
 
 ```mermaid
 stateDiagram-v2
@@ -156,7 +199,7 @@ erDiagram
 
 Só o engine e o analista mudam o estado; só em `agent` o assistente responde. Uma conversa tem no máximo um entre flow ativo, rascunho e run pausada. Migrações versionadas em código ([Persistence](docs/brain/conventions/Persistence.md)).
 
-## 6. Resiliência
+## 7. Resiliência
 
 ```mermaid
 flowchart TD
@@ -176,11 +219,11 @@ flowchart TD
 - Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. Legado fora (`NEXO_TICKETS_OUTAGE_RATE`) tem retry com backoff ([LegacyOutage](docs/brain/conventions/LegacyOutage.md)).
 - Testes: regras em `src/services/tickets/*.test.ts`, runner roteirizado sem rede, integração com modelo Mastra simulado, ponta a ponta de duplicidade em `src/assistants/nexo/flows/dedup.validation.test.ts`.
 
-## 7. Transparência
+## 8. Transparência
 
 Cada resposta grava um `trace` ([DecisionTrace](docs/brain/entities/DecisionTrace.md)): ações com rótulo humano ("consultou seus chamados", "classificou a prioridade: Alta"), a decisão de `report-decision` (o que entendeu, o que fez, segurança alta/média/baixa, por quê), modelo, tokens e duração. No SSE os rótulos chegam antes do texto. Para o funcionário ficam acima da resposta ("consultou seus chamados", "montou o chamado"), sem painel técnico; no console do analista, **"Ver raciocínio"** abre o detalhe completo (decisão, passos, notas do engine, modelo, tokens) e já vem aberto quando a segurança foi baixa. A confiança é categórica porque o modelo não tem calibração que justifique um percentual.
 
-## 8. API
+## 9. API
 
 Cookie httpOnly `nexo_session` ou `Authorization: Bearer <token>` (HMAC). Contratos: [ChatApi](docs/brain/functions/ChatApi.md), [AnalystConsoleApi](docs/brain/functions/AnalystConsoleApi.md).
 
@@ -198,7 +241,7 @@ C=$(curl -s -X POST localhost:3000/api/conversations -H "authorization: Bearer $
 curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $T" -H 'accept: text/event-stream' -H 'content-type: application/json' -d '{"text":"minha vpn dá erro 809"}'
 ```
 
-## 9. Decisões e trade-offs
+## 10. Decisões de arquitetura e trade-offs
 
 | Decisão | Alternativa rejeitada | Por quê |
 |---|---|---|
@@ -209,31 +252,6 @@ curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $
 | **Outbox em SQLite, worker no processo** | executar na hora e torcer | confirmação nunca se perde; em produção o worker seria dedicado e a presença "digitando…" iria para um store compartilhado |
 | **Polling no console** | SSE por conversa | funciona em qualquer hospedagem; SSE é o passo seguinte |
 | **Confiança categórica** | percentual | o modelo não é calibrado; um número daria precisão falsa |
-| **Validação de entrada por regex** | classificador por mensagem | pega o caso barato e frequente (caractere solto, símbolos, repetição, só números) a custo zero e sem falso positivo em mensagens curtas legítimas ("oi", "vpn"); palavras reais sem sentido ainda vão ao modelo, que pede detalhes |
+| **Validação de entrada por regex** | classificador por mensagem | custo zero e sem falso positivo em mensagens curtas legítimas ("oi", "vpn"); palavras reais sem sentido ainda vão ao modelo, que pede detalhes (seção 4) |
 
 Próximos passos: guardrails por classificador com confiança (`NEXO_FAST_MODEL`, `inputProcessors` do Mastra) para escopo, INC/REQ e texto sem sentido que o regex não pega; promover memória recorrente a artigo da FAQ; multi-persona (tabela de personas, chaves por integrador); avaliação automática com conversas de referência contra o modelo real.
-
-## 10. Pontos de decisão: regra × IA
-
-Cada ponto em que o sistema decide algo, quem decide e por quê. Regra = código determinístico testado, custo zero de modelo. IA = o modelo decide dentro do que as tools permitem. Nos pontos mistos, a IA propõe e a regra confere.
-
-| Ponto | Quem decide | Onde | Por quê |
-|---|---|---|---|
-| Mensagem tem conteúdo útil? | Regra (regex/contagem; política por persona) | `engine/conversation/inputGuard.ts`, `turn.ts` | Caractere solto ou símbolos custavam duas chamadas ao modelo para responder "não entendi". |
-| Conversa aceita mensagem? (encerrada, limite de 30, analista na conversa) | Regra | `turn.ts` | Estado é fato, não interpretação. |
-| "Confirmar", "cancelar", "editar X" diante do rascunho; cancelar uma pergunta | Regra (opção clicada ou regex de texto curto); texto ambíguo vai à IA com o rascunho no contexto | `engine/actions/pending.ts`, `engine/flows/runner.ts` | Confirmação de efeito colateral não pode depender de interpretação. |
-| Quais perguntas faltam para o chamado (impacto, urgência, afetados…) e em que ordem | Regra (passos do chat-formulário; a tool pergunta pausando a run) | `assistants/nexo/flows/openTicket.ts`, `tools/ticketActions.ts` | Responder às perguntas reexecuta só a tool: zero chamadas ao modelo. |
-| Tipo (INC/REQ) e categoria | IA pré-preenche quando o funcionário já disse; regra pergunta com opções quando falta | `tools/ticketActions.ts` | Sem LLM extra; uma pergunta a mais quando há dúvida. |
-| Prioridade e prazo | Regra (matriz impacto × urgência do Anexo A; horas/dias úteis) | `services/tickets/priority.ts`, `sla.ts` | Regra de negócio auditável; o modelo não arbitra prioridade. |
-| É duplicado ou reabertura? | IA indica o chamado relacionado quando reconhece paráfrase; regra confere em três camadas (flow, rascunho, transação) | `services/tickets/dedup.ts`, `ticketService.ts` | A IA cobre sinônimos a custo zero; a regra impede gravação dupla mesmo em paralelo. |
-| Assunto é de TI? | Instrução ao modelo + guarda lexical conservadora na `open-ticket` | `assistants/nexo/scope.ts` | Sinal claro de RH/financeiro/facilities nunca vira chamado; na dúvida o modelo decide. |
-| Quais chamados o funcionário pode ver | Regra (filtro por usuário em toda tool) | `tools/tickets.ts`, `services/tickets` | Privacidade no código, não no prompt. |
-| Criar, complementar ou reabrir chamado | Regra: só após "Confirmar", pelo outbox com chave de idempotência | `turn.ts`, `engine/actions/queue.ts` | Nenhum efeito colateral depende de o modelo "prometer". |
-| Transferir para analista | IA chama a tool (pedido, crítico, vencido, insegurança); regra transfere sozinha ao criar chamado crítico e após duas respostas seguidas com confiança baixa | `tools/transfer.ts`, `actions.ts`, `turn.ts` | O modelo reconhece o caso; o engine garante os casos do Anexo A sem depender dele. |
-| "Isso resolveu?" | Regra para clique e respostas claras; IA lê o texto quando ambíguo (`unclear`) | `tools/helpCenter.ts` | Métrica de resolução sem gastar modelo nos casos óbvios. |
-| Buscar na central de ajuda e nas soluções de analistas | Regra (busca lexical: título > tags > corpo) | `services/helpCenter/helpCenterService.ts` | Determinística e suficiente para dezenas de itens; embeddings quando a base crescer. |
-| Qual artigo se aplica e o que dizer ao funcionário | IA | `instructions.ts`, tools `suggest-help-article` / `cite-articles` | É o trabalho do modelo: entender o problema e conduzir. |
-| Entender o problema, pedir detalhes, redigir a resposta | IA | `instructions.ts` | Idem; as instruções limitam o tom e proíbem inventar status e procedimentos. |
-| Confiança da resposta | IA declara (`report-decision`, categórica); regra usa como gatilho de segurança | `engine/tools/wrap.ts`, `turn.ts` | Autodeclaração não é calibrada, por isso vira categoria e gatilho, não percentual. |
-
-**Em escala.** As validações de entrada são configuração da persona, não constante do código: `AssistantConfig.inputPolicy` define mínimo de caracteres, se aceita só números, a classe de caracteres permitidos, a dica e os atalhos da resposta; o cliente recebe a mesma política em `conversation.inputPolicy` e bloqueia antes de enviar. Como produto, isso vira um registro por tenant com tela de administração (a mesma tabela de personas prevista em multi-persona), e as notas do trace (`entrada sem conteúdo útil (<motivo>)`) permitem medir quantas mensagens foram barradas e ajustar a política sem tocar em código. A validação continua obrigatória em qualquer configuração: o que muda é o quão permissiva ela é.

@@ -26,7 +26,7 @@
 - 2026-11-01 | analista | Detalhe da conversa degrada só o painel de chamados (tickets: null) quando o legado está indisponível.
 - 2026-11-01 | front | Passos `quiet` no trace: busca na central some da linha de status do chat (segue no "Por quê?" e no console).
 - 2026-11-01 | front | Console: rodapé de atendimento quebra os botões em linha própria em larguras intermediárias (antes espremia o texto).
-- 2026-11-02 | readme | README reescrito no padrão "entenda" (um diagrama Mermaid por seção): rodar e deploy primeiro (Render Free sem banco externo, disco efêmero), depois arquitetura, turno, fluxo, estados, resiliência e trade-offs, com links para o Brain.
+- 2026-11-02 | readme | README reescrito no padrão "entenda" (um diagrama Mermaid por seção): rodar e deploy primeiro (Render Free sem banco externo, disco efêmero), depois arquitetura, turno, seção "Decisões de IA e custo" (regex antes do modelo, perguntas sem LLM, tabela regra × IA), fluxo, estados, resiliência e trade-offs, com links para o Brain.
 - 2026-11-01 | escopo | Guarda determinística de escopo TI em `open-ticket` (`scope.ts`, OUT_OF_SCOPE); validação do PRD registrada em Requirements com pendências atualizadas.
 - 2026-11-01 | central | Central como memória: `suggest-help-article` (HITL) pergunta "isso resolveu?" e grava HelpFeedback; `resolveTicket` + `POST /api/analyst/tickets/:id/resolve` gravam ResolutionMemory, pesquisada junto dos artigos (`searchKnowledge`); métricas em `GET /api/analyst/help-center/metrics`; migração 4; `SuspendPrompt.payload`; `maxSteps` 8.
 - 2026-11-01 | chamados | Ganchos da persona (`AssistantConfig.hooks`): transferir conversa → chamado vinculado `aguardando_analista`; assumir → `em_atendimento`; best-effort com o legado fora.
