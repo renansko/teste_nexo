@@ -10,6 +10,7 @@ npm install && npm run dev   # http://localhost:3000 (Node 22.5+; SQLite criado 
 ```
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart LR
     Env[".env.local<br/>com as 2 chaves"] --> Dev["npm run dev<br/>ou docker compose up"]
     Dev --> Func["/<br/>funcionário"]
@@ -42,6 +43,7 @@ Para ver o fluxo completo, abra duas abas (ou uma janela anônima): funcionário
 ## 2. Visão geral
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 graph LR
     subgraph UI["Front (Next.js)"]
         Chat["Chat do funcionário<br/>(SSE)"]
@@ -75,6 +77,7 @@ graph LR
 Cada mensagem passa por `src/engine/conversation/turn.ts` nesta ordem ([Turn](docs/brain/functions/Turn.md)):
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TD
     Msg(["Mensagem<br/>do funcionário"]) --> Estado{"Com analista, encerrada<br/>ou no limite?"}
     Estado -- sim --> Grava["Grava e não<br/>responde (ou 409)"]
@@ -101,6 +104,7 @@ O modelo só entra na última caixa. Tudo antes dela é regra: estado, run pausa
 O PRD coloca aqui o centro do desafio, e foi onde o esforço se concentrou. Princípio: **a IA decide só o que exige entender linguagem** (qual é o problema, qual artigo se aplica, como conduzir). Tudo que é fato, regra do Anexo A ou efeito colateral é código determinístico, testado e com custo zero de modelo. Nos pontos mistos a IA propõe e a regra confere. Resultado: menos chamadas ao modelo e comportamento previsível justamente onde há efeito colateral.
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart LR
     M(["Mensagem"]) --> G{"Regex e contagem<br/>'A', '???', 'aaaa'"}
     G -- barrada --> R0["Resposta por regra<br/>+ atalhos: 0 chamadas"]
@@ -217,6 +221,7 @@ Só o engine e o analista mudam o estado; só em `agent` o assistente responde. 
 ## 7. Resiliência
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TD
     C(["Confirmar"]) --> Tx["Transação: rascunho sai,<br/>action_queue = processing"]
     Tx --> Exec["Executor sem LLM<br/>idempotencyKey = id do rascunho"]
