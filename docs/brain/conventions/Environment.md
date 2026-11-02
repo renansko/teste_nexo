@@ -16,5 +16,6 @@ Configuração por variáveis de ambiente, validada com zod. Código: `src/lib/e
 
 - Duas camadas porque `next build` importa os módulos de rota sem `.env`: validar chaves no import quebraria o build da imagem Docker.
 - `NEXO_MODEL`/`NEXO_FAST_MODEL` usam o formato `provedor/modelo` do model router do Mastra (padrão único `openai/gpt-6-luna`); não existe variável de provedor separada. Ver [AssistantConfig](../services/AssistantConfig.md).
+- Prefixo `stub/` (`isStubModel`) é um provedor fictício: dispensa chave e troca o Mastra pelo runner determinístico de `src/engine/agent/stubRunner.ts` ([LoadTesting](LoadTesting.md)). Só o modelo com esse prefixo fica isento; o outro continua exigindo a chave. Nunca é padrão nem deve ir para produção.
 - Faixas: `NEXO_TICKETS_OUTAGE_RATE` 0..1, `NEXO_BUSINESS_TZ_OFFSET_MINUTES` -720..840, `NEXO_AUTH_SECRET` ≥ 16 caracteres.
 - Não há variável para o banco do Mastra: `mastra.db` é derivado do diretório de `NEXO_DB_PATH` ([Persistence](Persistence.md)), para o volume do Docker cobrir os dois arquivos.

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apiKeyVarFor, assertRuntimeEnv, env, EnvError } from "./env";
+import { apiKeyVarFor, assertRuntimeEnv, env, EnvError, isStubModel } from "./env";
 
 test("defaults: openai/gpt-6-luna; vazio conta como ausente", () => {
   const e = env({ NEXO_MESSAGE_LIMIT: "", NEXO_MODEL: "" });
@@ -32,4 +32,11 @@ test("runtime: exige a chave do provedor do modelo e segredo em produção", () 
   assert.throws(() => assertRuntimeEnv({ NODE_ENV: "production", OPENAI_API_KEY: "x" }), /NEXO_AUTH_SECRET/);
   assert.doesNotThrow(() => assertRuntimeEnv({ NODE_ENV: "production", OPENAI_API_KEY: "x", NEXO_AUTH_SECRET: "0123456789abcdef" }));
   assert.doesNotThrow(() => assertRuntimeEnv({ NODE_ENV: "test" }));
+});
+
+test("stub/<modelo> dispensa chave de provedor (carga e demo sem custo)", () => {
+  assert.ok(isStubModel("stub/nexo"));
+  assert.ok(!isStubModel("openai/gpt-6-luna"));
+  assert.doesNotThrow(() => assertRuntimeEnv({ NODE_ENV: "development", NEXO_MODEL: "stub/nexo", NEXO_FAST_MODEL: "stub/nexo" }));
+  assert.throws(() => assertRuntimeEnv({ NODE_ENV: "development", NEXO_MODEL: "stub/nexo" }), /OPENAI_API_KEY/); // o modelo rápido segue real
 });

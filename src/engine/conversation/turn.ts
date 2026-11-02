@@ -14,7 +14,9 @@ import {
 import { getAssistant } from "../registry";
 import type { AgentRunner, AgentRunParams } from "../agent/types";
 import { agentError, createMastraRunner, RESUME_GONE } from "../agent/mastraRunner";
+import { createStubRunner } from "../agent/stubRunner";
 import { discardSuspendedRun } from "../agent/mastra";
+import { env, isStubModel } from "@/lib/env";
 import { newCollector, wrapTools, type TurnCollector } from "../tools/wrap";
 import { advanceFlow, CANCEL_OPTION, isCancelInput, resumeAtStep, startFlow, type FlowStepResult } from "../flows/runner";
 import { interpretPendingInput, pendingParts, withActionId } from "../actions/pending";
@@ -61,10 +63,13 @@ export function setDefaultRunner(runner?: AgentRunner): void {
   defaultRunner = runner;
 }
 
+/** Produção: Mastra com o modelo de `NEXO_MODEL`; `stub/...` (carga, demo sem provedor) usa o runner determinístico. */
+const productionRunner = (): AgentRunner => (isStubModel(env().NEXO_MODEL) ? createStubRunner() : createMastraRunner());
+
 export async function runTurn(p: TurnParams): Promise<TurnResult> {
   const now = p.now ?? new Date();
   const emit: Emit = p.emit ?? (() => {});
-  const runner = p.runner ?? (defaultRunner ??= createMastraRunner());
+  const runner = p.runner ?? (defaultRunner ??= productionRunner());
 
   let conv = getConversation(p.conversationId);
   if (!conv || conv.employeeId !== p.user.id) throw new AppError("NOT_FOUND", "Conversa não encontrada", 404);

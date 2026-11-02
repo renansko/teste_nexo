@@ -40,6 +40,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [Persistence](conventions/Persistence.md) — SQLite, migrações, JSON em colunas.
 - [FrontendUI](conventions/FrontendUI.md) — Rotas do front, sessão, SSE/polling, cards, console do analista e painel de decisão.
 - [InputPolicy](conventions/InputPolicy.md) — Validação determinística do texto livre antes do modelo; política por persona; resposta por regra.
+- [LoadTesting](conventions/LoadTesting.md) — Carga de 2.000 funcionários sem custo de modelo: runner stub (`NEXO_MODEL=stub/...`), script, baseline medido e limites.
 
 ## Produto
 
@@ -62,6 +63,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - `legacyGateway`, `withRetry` → [LegacyOutage](conventions/LegacyOutage.md)
 - `recordConfirmedAction`, `processActionQueue`, `startActionQueueWorker`, `withActionId` → [ActionQueue](services/ActionQueue.md)
 - `nexoAssistant`, `openTicketFlow`, `nexoActions`, `openTicket` → [NexoAssistant](services/NexoAssistant.md)
-- `env`, `assertRuntimeEnv`, `apiKeyVarFor` → [Environment](conventions/Environment.md)
+- `env`, `assertRuntimeEnv`, `apiKeyVarFor`, `isStubModel` → [Environment](conventions/Environment.md)
+- `createStubRunner`, `npm run load` → [LoadTesting](conventions/LoadTesting.md)
 - `api`, `analystApi`, `streamMessage`, `SessionProvider`, `ChatScreen`, `AnalystConsole` → [FrontendUI](conventions/FrontendUI.md)
 - `DecisionDetails`, `LOW_CONFIDENCE_REASON` → [DecisionTrace](entities/DecisionTrace.md)

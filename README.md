@@ -20,11 +20,11 @@ flowchart LR
 
 - Qualquer senha. Outros funcionários: `bruno.lima`, `carla.mendes`, `diego.rocha`, `elisa.martins` (`@nexo.com`); outra analista: `gabriela.castro`.
 - Docker: `cp .env.example .env`, preencha as chaves, `docker compose up --build` (volume `nexo-data` guarda o banco).
-- `npm test` (sem rede) · `npm run typecheck` · `npm run seed` recria os dados de exemplo.
+- `npm test` (sem rede) · `npm run typecheck` · `npm run seed` recria os dados de exemplo · `npm run load` simula 2.000 funcionários sem custo de modelo (seção 7).
 
 **Por onde olhar.** Em um minuto: abra um chamado como funcionário e veja o raciocínio em "Ver raciocínio" no console do analista. No código, três pontos: a abertura de chamado pausa a run do agent e retoma com a resposta do funcionário (seção 5); a confirmação vira outbox com chave de idempotência, então o legado pode cair sem duplicar chamado (seção 7); o trace de decisão fica com o analista, o funcionário vê só as ações (seção 8).
 
-**Deploy.** Sem banco externo: o SQLite roda no container. Qualquer PaaS que construa um `Dockerfile` serve, com `OPENAI_API_KEY`, `NEXO_AUTH_SECRET` (16+ caracteres), `NODE_ENV=production`, `NEXO_DB_PATH=/app/data/nexo.db`, porta `3000`, health check em `/entrar`. No **Render Free** (New Web Service → repositório → Docker) o serviço dorme após 15 min e o disco é efêmero: a cada hibernação ou deploy o banco volta ao seed. Para persistir de graça, uma VM Always Free da Oracle com este `docker compose` e um proxy TLS (`x-forwarded-proto: https` deixa o cookie `Secure`). Defina limite de gasto na OpenAI; não há rate limit por IP.
+**Deploy.** Sem banco externo: o SQLite roda no container. Qualquer hospedagem que construa um `Dockerfile` serve, com as variáveis de `.env.example` e `NODE_ENV=production`. Sem volume persistente, cada deploy ou reinício recria o banco a partir do seed; com volume (como no `docker compose`), os dados ficam.
 
 ## 2. Visão geral
 
@@ -221,6 +221,29 @@ flowchart TD
 - Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. Legado fora (`NEXO_TICKETS_OUTAGE_RATE`) tem retry com backoff ([LegacyOutage](docs/brain/conventions/LegacyOutage.md)).
 - Testes: regras em `src/services/tickets/*.test.ts`, runner roteirizado sem rede, integração com modelo Mastra simulado, ponta a ponta de duplicidade em `src/assistants/nexo/flows/dedup.validation.test.ts`.
 
+### Carga: 2.000 funcionários sem custo de modelo
+
+O PRD situa a Nexo em cerca de 2.000 funcionários. Para testar essa escala sem gastar com o provedor, `NEXO_MODEL=stub/nexo` troca o Mastra por um runner determinístico no mesmo seam que os testes usam ([LoadTesting](docs/brain/conventions/LoadTesting.md)): decide por palavras-chave, chama as mesmas tools e grava o mesmo trace; nenhuma chave é exigida. Todo o resto (rotas, engine, SQLite, SSE, outbox, simulação do legado) é o caminho de produção.
+
+```bash
+npm run build
+NODE_ENV=production NEXO_MODEL=stub/nexo NEXO_FAST_MODEL=stub/nexo NEXO_AUTH_SECRET=<16+ chars> \
+  NEXO_DB_PATH=$PWD/data/load.db PORT=3100 node .next/standalone/server.js      # caminho absoluto: o standalone muda o cwd
+NEXO_DB_PATH=$PWD/data/load.db npm run load -- --base http://localhost:3100 --employees 2000 --concurrency 100
+```
+
+O script cria 2.000 funcionários de carga no banco, e cada um faz login, lista conversas, abre uma, manda 4 mensagens por SSE (chamados, central, uma barrada por regra, texto livre) com o polling incremental entre elas e lista os próprios chamados, conferindo que só vê o que é dele. Resultado medido (WSL2, 16 vCPU, um processo Node, 100 em paralelo):
+
+| endpoint | n | erros | p50 ms | p95 ms | p99 ms |
+|---|---:|---:|---:|---:|---:|
+| `POST /api/auth/login` | 2000 | 0 | 459 | 1226 | 1445 |
+| `POST /api/conversations` | 2000 | 1 | 784 | 1455 | 8329 |
+| turno por SSE (até `message.end`) | 7996 | 0 | 1167 | 1543 | 3514 |
+| `GET .../messages?after=` (polling) | 7996 | 0 | 1137 | 1492 | 2314 |
+| `GET /api/tickets` | 1999 | 0 | 676 | 1263 | 1581 |
+
+~100 req/s e ~33 turnos/s por processo, zero violação de privacidade, zero evento `error` no SSE, 2.000 mensagens respondidas por regra sem modelo. Com 100 clientes em laço fechado a latência é concorrência ÷ vazão, por isso o p50 fica em ~1 s: o limite é o processo único com SQLite síncrono, não a rede. Com a simulação do legado ligada (`NEXO_TICKETS_OUTAGE_RATE=0.05`, padrão), a vazão é a mesma, mas como a probabilidade é por chamada o legado fica "fora" quase o tempo todo sob carga: 54% dos turnos que consultam chamados responderam "instável agora" após os retries (sem erro no chat) e 66% dos `GET /api/tickets` deram 503. É a simulação escalando com o tráfego, não um defeito do engine. O teste achou e corrigiu um defeito real: `database is locked` no worker da fila quando outro processo escreve (faltava `busy_timeout`). Para 2.000 abas abertas ao mesmo tempo, o próximo gargalo é o polling do funcionário (6 s em `agent`): SSE também para ele e polling só com a aba visível são os passos seguintes.
+
 ## 8. Transparência
 
 Cada resposta grava um `trace` ([DecisionTrace](docs/brain/entities/DecisionTrace.md)): ações com rótulo humano ("consultou seus chamados", "classificou a prioridade: Alta"), a decisão de `report-decision` (o que entendeu, o que fez, segurança alta/média/baixa, por quê), modelo, tokens e duração. No SSE os rótulos chegam antes do texto. Para o funcionário ficam acima da resposta ("consultou seus chamados", "montou o chamado"), sem painel técnico; no console do analista, **"Ver raciocínio"** abre o detalhe completo (decisão, passos, notas do engine, modelo, tokens) e já vem aberto quando a segurança foi baixa. A confiança é categórica porque o modelo não tem calibração que justifique um percentual.
@@ -256,4 +279,4 @@ curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $
 | **Confiança categórica** | percentual | o modelo não é calibrado; um número daria precisão falsa |
 | **Validação de entrada por regex** | classificador por mensagem | custo zero e sem falso positivo em mensagens curtas legítimas ("oi", "vpn"); palavras reais sem sentido ainda vão ao modelo, que pede detalhes (seção 4) |
 
-**O que ficou de fora e por quê.** Guardrails por classificador com confiança (`NEXO_FAST_MODEL`, `inputProcessors` do Mastra) para escopo, INC/REQ e texto sem sentido que o regex não pega: o regex cobre os casos medidos e um classificador erraria em mensagens curtas legítimas, então ficou como próximo passo. Persistência no deploy gratuito: o disco do Render Free é efêmero (seção 1). Também não feitos: promover memória recorrente a artigo da FAQ; multi-persona (tabela de personas, chaves por integrador); avaliação automática com conversas de referência contra o modelo real. As decisões e invariantes deste README vivem em [docs/brain](docs/brain/index.md), mantido junto com o código a cada mudança.
+**O que ficou de fora e por quê.** Guardrails por classificador com confiança (`NEXO_FAST_MODEL`, `inputProcessors` do Mastra) para escopo, INC/REQ e texto sem sentido que o regex não pega: o regex cobre os casos medidos e um classificador erraria em mensagens curtas legítimas, então ficou como próximo passo. Persistência no deploy gratuito: sem volume, o disco é efêmero (seção 1). Também não feitos: promover memória recorrente a artigo da FAQ; multi-persona (tabela de personas, chaves por integrador); avaliação automática com conversas de referência contra o modelo real. As decisões e invariantes deste README vivem em [docs/brain](docs/brain/index.md), mantido junto com o código a cada mudança.

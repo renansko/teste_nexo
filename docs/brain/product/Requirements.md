@@ -2,6 +2,10 @@
 
 Resumo do PRD "Desafio Técnico: Nexo Assist, o agent do service desk de TI" (Beyond the Bytes). O PDF original é escaneado; o texto foi transcrito manualmente.
 
+## Contexto e escala
+
+Nexo tem cerca de 2.000 funcionários; o problema de hoje é o formulário: chamados para dúvidas que a central já responde, duplicados, prioridade errada, informação faltando e analistas gastando o dia em triagem. O sistema de chamados é legado e "de vez em quando fica indisponível por alguns segundos" ([LegacyOutage](../conventions/LegacyOutage.md)). "Também esperamos": arquitetura clara, boas práticas, **eficiência** (respostas rápidas e uso consciente do modelo, custo por conversa: [InputPolicy](../conventions/InputPolicy.md), README seção 4) e **segurança e privacidade** (chaves fora do código; chamados de um funcionário nunca expostos a outro). A escala de 2.000 é verificada por [LoadTesting](../conventions/LoadTesting.md), sem custo de modelo.
+
 ## Objetivo e métricas
 
 Funcionário resolve dúvidas no chat, abre chamados completos (tipo, categoria, prioridade, sem duplicidade), é encaminhado ao analista na hora certa com contexto, e consegue ver o que o agent fez e por quê (transparência é o critério mais importante).

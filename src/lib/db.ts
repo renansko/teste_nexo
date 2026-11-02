@@ -173,7 +173,10 @@ export function getDb(): DatabaseSync {
   const path = env().NEXO_DB_PATH;
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const conn = new DatabaseSync(path);
-  conn.exec(`PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;`);
+  // busy_timeout: sem ele, qualquer escrita concorrente de OUTRO processo (seed, script de carga, segunda instância)
+  // falha na hora com "database is locked" (visto no worker da fila durante o teste de carga). Dentro do processo
+  // o node:sqlite é síncrono e nunca disputa o lock.
+  conn.exec(`PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`);
   migrate(conn);
   db = conn;
   return conn;

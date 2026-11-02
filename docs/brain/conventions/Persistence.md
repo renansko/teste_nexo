@@ -10,4 +10,5 @@ Todo estado vive em SQLite (`node:sqlite`, `NEXO_DB_PATH`, padrão `./data/nexo.
 - `boot()` (rotas) = abrir banco + seed idempotente da persona; `npm run seed` faz o mesmo fora do servidor.
 - Testes usam um arquivo temporário por processo (`src/test/helpers.ts`); `node --test` isola cada arquivo de teste num processo.
 - `node:sqlite` exige Node 22.5+ (testado em 24). `transaction(fn)` para escritas compostas, com `BEGIN IMMEDIATE`: "ler, decidir, gravar" fica serializado entre processos.
+- `PRAGMA busy_timeout = 5000` na abertura: escrita concorrente de outro processo (seed, `npm run load`, segunda instância) espera o lock em vez de falhar na hora com `database is locked` (o worker da fila falhou assim durante o teste de carga, [LoadTesting](LoadTesting.md)). Dentro do processo não há disputa: o driver é síncrono.
 - Migração 2: `idempotency_key` (unique parcial) em `tickets`/`ticket_updates` e tabela `action_queue` ([ActionQueue](../services/ActionQueue.md)).

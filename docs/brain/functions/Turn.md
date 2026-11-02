@@ -20,7 +20,7 @@
 - Erros de domínio no SSE viram evento `error` (sem fechar com 4xx); em JSON viram status.
 - Mensagem do usuário é gravada mesmo se o agent falhar (`AGENT_ERROR`) ou se for barrada pela validação; o texto gravado é o normalizado (`normalizeInput`).
 - O passo 6a é o único ponto por onde texto livre chega ao modelo; `optionId`, flow, rascunho e run suspensa saem antes dele.
-- O runner é injetável (`setDefaultRunner`), por isso os testes de rota não chamam modelo.
+- O runner é injetável (`setDefaultRunner`), por isso os testes de rota não chamam modelo. Sem injeção, o padrão é Mastra, ou o runner stub quando `NEXO_MODEL` tem prefixo `stub/` ([LoadTesting](../conventions/LoadTesting.md)).
 - `RESUME_GONE` ao retomar (snapshot sumiu) não é erro para o cliente: limpa `suspendedRun` e responde pedindo para recomeçar.
 
 Ver [ChatApi](ChatApi.md), [DecisionTrace](../entities/DecisionTrace.md).

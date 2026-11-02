@@ -13,6 +13,13 @@ const opt = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (v === "" ? 
 /** Modelo único do projeto, no formato `provedor/modelo` do model router do Mastra. */
 export const DEFAULT_MODEL = "openai/gpt-6-luna";
 
+/**
+ * Provedor fictício: `NEXO_MODEL=stub/nexo` troca o Mastra por um runner determinístico (sem rede, sem chave, custo zero).
+ * Serve ao teste de carga e a demonstrações sem provedor; nunca é o padrão. Ver `src/engine/agent/stubRunner.ts`.
+ */
+export const STUB_PROVIDER = "stub";
+export const isStubModel = (model: string): boolean => model.split("/")[0] === STUB_PROVIDER;
+
 /** `provedor/modelo`: o prefixo escolhe o provedor (e a chave `<PROVEDOR>_API_KEY`); o resto é o id no provedor. */
 const modelId = z.string().regex(/^[a-z0-9-]+\/.+$/, "use o formato provedor/modelo (ex.: openai/gpt-6-luna)");
 
@@ -54,7 +61,8 @@ export function assertRuntimeEnv(source: Record<string, string | undefined> = pr
   const e = env(source);
   const problems: string[] = [];
   if (e.NODE_ENV !== "test") {
-    for (const keyVar of new Set([apiKeyVarFor(e.NEXO_MODEL), apiKeyVarFor(e.NEXO_FAST_MODEL)])) {
+    const real = [e.NEXO_MODEL, e.NEXO_FAST_MODEL].filter((m) => !isStubModel(m));
+    for (const keyVar of new Set(real.map(apiKeyVarFor))) {
       if (!source[keyVar]) problems.push(`${keyVar}: obrigatória para o provedor de NEXO_MODEL/NEXO_FAST_MODEL`);
     }
   }
