@@ -1,9 +1,7 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, LoaderCircle, MessageCircleQuestion, X } from "lucide-react";
-import type { ChatMessage, Option, TicketView, Trace, TraceAction } from "@/lib/api";
-import { DecisionDetails, hasDetails } from "@/components/trace/DecisionDetails";
-import traceStyles from "@/components/trace/Trace.module.css";
+import { useEffect, useRef } from "react";
+import { Check, LoaderCircle, MessageCircleQuestion, X } from "lucide-react";
+import type { ChatMessage, Option, TicketView, TraceAction } from "@/lib/api";
 import { looseOptions, OptionChips, PayloadCards } from "./payload/Payload";
 import { RichText } from "./RichText";
 import styles from "./Chat.module.css";
@@ -60,7 +58,7 @@ export function MessageList({ messages, streaming, analystTyping = false, intera
           const handlers = { interactive: live, onOption, onPickTicket };
           const chips = looseOptions(parts);
           return (
-            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions} trace={m.trace}>
+            <AgentMessage key={m.id} who={AUTHOR[m.role]} analyst={m.role === "analyst"} actions={m.trace?.actions}>
               {(m.content || chips) && (
                 <div className={styles.agentBubble}>
                   {m.content && <RichText className={styles.text} text={m.content} />}
@@ -106,20 +104,16 @@ export function MessageList({ messages, streaming, analystTyping = false, intera
 /**
  * `live`: turno em andamento (SSE), onde `pending` significa "executando" (spinner). Numa mensagem gravada,
  * `pending` é uma tool que parou para perguntar ao funcionário: ícone estático de pergunta.
- * `trace`: decisão gravada; quando tem detalhes, mostra o "Por quê?".
- * Passos `quiet` (consultas de rotina, ex.: busca na central) não entram na linha de status; seguem no "Por quê?".
+ * O funcionário vê só a linha de passos; o detalhe da decisão (`DecisionDetails`) fica no console do analista.
+ * Passos `quiet` (consultas de rotina, ex.: busca na central) não entram na linha de status.
  */
 function AgentMessage(props: {
   who: string;
   analyst?: boolean;
   actions?: TraceAction[];
-  trace?: Trace | null;
   live?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const panelId = useId();
-  const details = hasDetails(props.trace) ? props.trace : null;
   return (
     <div className={styles.agentRow}>
       <div className={styles.statusLine}>
@@ -142,20 +136,7 @@ function AgentMessage(props: {
             {a.label}
           </span>
         ))}
-        {details && (
-          <button
-            type="button"
-            className={traceStyles.toggle}
-            aria-expanded={open}
-            aria-controls={panelId}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? "Ocultar detalhes" : "Por quê?"}
-            <ChevronDown size={13} aria-hidden />
-          </button>
-        )}
       </div>
-      {details && open && <DecisionDetails trace={details} id={panelId} />}
       {props.children}
     </div>
   );

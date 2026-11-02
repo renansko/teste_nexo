@@ -26,6 +26,7 @@
 - 2026-11-01 | analista | Detalhe da conversa degrada só o painel de chamados (tickets: null) quando o legado está indisponível.
 - 2026-11-01 | front | Passos `quiet` no trace: busca na central some da linha de status do chat (segue no "Por quê?" e no console).
 - 2026-11-01 | front | Console: rodapé de atendimento quebra os botões em linha própria em larguras intermediárias (antes espremia o texto).
+- 2026-11-02 | readme | README reescrito no padrão "entenda" (um diagrama Mermaid por seção): rodar e deploy primeiro (Render Free sem banco externo, disco efêmero), depois arquitetura, turno, fluxo, estados, resiliência e trade-offs, com links para o Brain.
 - 2026-11-01 | escopo | Guarda determinística de escopo TI em `open-ticket` (`scope.ts`, OUT_OF_SCOPE); validação do PRD registrada em Requirements com pendências atualizadas.
 - 2026-11-01 | central | Central como memória: `suggest-help-article` (HITL) pergunta "isso resolveu?" e grava HelpFeedback; `resolveTicket` + `POST /api/analyst/tickets/:id/resolve` gravam ResolutionMemory, pesquisada junto dos artigos (`searchKnowledge`); métricas em `GET /api/analyst/help-center/metrics`; migração 4; `SuspendPrompt.payload`; `maxSteps` 8.
 - 2026-11-01 | chamados | Ganchos da persona (`AssistantConfig.hooks`): transferir conversa → chamado vinculado `aguardando_analista`; assumir → `em_atendimento`; best-effort com o legado fora.
@@ -33,3 +34,5 @@
 - 2026-11-01 | front | Diálogos do produto (`ui/Dialog`) no lugar de `confirm()`: encerrar atendimento confirma em modal; "Resolver chamado" no painel abre `ResolveTicketDialog` com a solução. Testes carregam `*.module.css` via `src/test/setup.ts`.
 - 2026-11-02 | digitando | Presença "digitando" em memória (`presence.ts`, TTL 4 s): `POST .../typing` dos dois lados, `typing` no polling do funcionário e no detalhe do console; balões de três pontos no chat e no console.
 - 2026-11-02 | analista | Console por funcionário: lista com um item por pessoa (conversa ativa, `threadSize`), detalhe com `thread` (demais conversas) e chat único com divisor "Nova conversa".
+- 2026-11-02 | entrada | InputPolicy: validação determinística do texto livre antes do modelo (`inputGuard.ts`, política `AssistantConfig.inputPolicy`, resposta `source: rule`, `PublicConversation.inputPolicy` e composer com a mesma regra). README: nó de validação no diagrama do turno, linha na tabela de trade-offs e seção 10 "Pontos de decisão: regra × IA".
+- 2026-11-02 | front | Chat do funcionário sem "Por quê?" (detalhe da decisão só no console, "Ver raciocínio"); Ctrl/Cmd+Enter envia nos composers do funcionário e do analista.

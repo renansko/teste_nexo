@@ -1,116 +1,239 @@
 # Nexo Assist
 
-Agent de service desk de TI em formato de chat: o funcionário descreve o problema com as próprias palavras e o agent consulta a central de ajuda, consulta/abre/complementa chamados e chama um analista quando precisa. Construído como um **engine de chat reutilizável** (persona-agnóstico) com a persona "Nexo Assist" plugada por configuração.
+> **Resumo**: agent de service desk de TI em chat. O funcionário descreve o problema; o agent consulta a central de ajuda, consulta/abre/complementa chamados e chama um analista quando precisa. O chat é um **engine reutilizável** (não conhece a Nexo) com a persona "Nexo Assist" plugada por configuração.
 
-## Rodar
+## 1. Rodar
 
 ```bash
-npm install
-cp .env.example .env.local     # preencha OPENAI_API_KEY e NEXO_AUTH_SECRET
-npm run dev                    # http://localhost:3000
+cp .env.example .env.local   # preencha OPENAI_API_KEY e NEXO_AUTH_SECRET
+npm install && npm run dev   # http://localhost:3000 (Node 22.5+; SQLite criado e semeado no 1º acesso em ./data)
 ```
 
-- `npm test` roda os testes (node:test + tsx, sem rede); `npm run typecheck` checa os tipos; `npm run seed` recria os dados de exemplo.
-- Requer Node 22.5+ (usa `node:sqlite`). O banco fica em `./data/nexo.db` e é criado/semeado no primeiro acesso.
-- Com Docker: `cp .env.example .env` (preencha `OPENAI_API_KEY` e `NEXO_AUTH_SECRET`) e `docker compose up --build`. O app sobe em http://localhost:3000 (`NEXO_PORT` muda a porta) e o banco fica no volume `nexo-data`. Atrás de um proxy TLS, envie `x-forwarded-proto: https` para o cookie de sessão sair `Secure`.
-- Logins de exemplo (qualquer senha): `ana.souza@nexo.com`, `bruno.lima@nexo.com`, `carla.mendes@nexo.com`, `diego.rocha@nexo.com`, `elisa.martins@nexo.com`; analistas `fabio.nunes@nexo.com`, `gabriela.castro@nexo.com`.
-
-## Arquitetura
-
-```
-src/engine/        chat genérico: auth, turno, tools com trace, flows, ações pendentes, SSE   (não conhece a Nexo)
-src/assistants/nexo persona: instruções, tools, flow de abertura, executores, seed            (conhece as regras do Anexo A)
-src/services/      dados sem LLM: funcionários, central de ajuda, chamados (sistema legado simulado), conversas
-src/app/api/       camada HTTP fina (zod + erros → status)
-docs/brain/        contratos, invariantes e decisões (comece por docs/brain/index.md)
+```mermaid
+flowchart LR
+    Env[".env.local com as 2 chaves"] --> Dev["npm run dev ou docker compose up --build"]
+    Dev --> Func["/ funcionário: ana.souza@nexo.com"]
+    Dev --> Ana["/atendente analista: fabio.nunes@nexo.com"]
+    Func --> Chat["chat com cards, rascunhos e passos do agent"]
+    Ana --> Console["console: filas, assumir, responder, resolver"]
 ```
 
-Regras de dependência: `engine` nunca importa `assistants/*`; a persona importa `engine` e `services`; `services` não sabe o que é agent. O agent só acessa dados por tools, e as tools recebem o usuário logado pelo `requestContext`, por isso a privacidade dos chamados é garantida no código, não no prompt.
+- Qualquer senha. Outros funcionários: `bruno.lima`, `carla.mendes`, `diego.rocha`, `elisa.martins` (`@nexo.com`); outra analista: `gabriela.castro`.
+- Docker: `cp .env.example .env`, preencha as chaves, `docker compose up --build` (volume `nexo-data` guarda o banco).
+- `npm test` (sem rede) · `npm run typecheck` · `npm run seed` recria os dados de exemplo.
 
-**Por que Mastra + model router.** Mastra era a preferência do desafio e tem tools tipadas com zod, `requestContext` por requisição e stream com eventos de tool call. O modelo é a string `provedor/modelo` em `NEXO_MODEL` (padrão `openai/gpt-6-luna`): o model router do Mastra resolve o provedor e lê a chave `OPENAI_API_KEY`, sem SDK de provedor no projeto. As instruções são estáveis e entram no cache automático de prompt da OpenAI.
+**Deploy.** Sem banco externo: o SQLite roda no container. Qualquer PaaS que construa um `Dockerfile` serve, com `OPENAI_API_KEY`, `NEXO_AUTH_SECRET` (16+ caracteres), `NODE_ENV=production`, `NEXO_DB_PATH=/app/data/nexo.db`, porta `3000`, health check em `/entrar`. No **Render Free** (New Web Service → repositório → Docker) o serviço dorme após 15 min e o disco é efêmero: a cada hibernação ou deploy o banco volta ao seed. Para persistir de graça, uma VM Always Free da Oracle com este `docker compose` e um proxy TLS (`x-forwarded-proto: https` deixa o cookie `Secure`). Defina limite de gasto na OpenAI; não há rate limit por IP.
 
-## Como o agent decide
+## 2. Visão geral
 
-Cada mensagem do funcionário passa por `src/engine/conversation/turn.ts`, nesta ordem:
+```mermaid
+graph LR
+    subgraph UI["Front (Next.js)"]
+        Chat["Chat do funcionário (SSE)"]
+        Console["Console do analista (polling)"]
+    end
+    subgraph Engine["src/engine — genérico, não conhece a Nexo"]
+        Turn["Turno: estado → run pausada → rascunho → flow → validação → agent"]
+        Tools["Tools com trace, HITL, outbox"]
+    end
+    subgraph Persona["src/assistants/nexo — regras do Anexo A"]
+        Instr["Instruções + tools + executores + hooks"]
+    end
+    subgraph Services["src/services — sem LLM"]
+        Tickets["Chamados (legado simulado, cai às vezes)"]
+        Help["Central: artigos + soluções de analistas"]
+        Conv["Conversas"]
+    end
+    LLM["LLM via model router do Mastra (NEXO_MODEL)"]
+    Chat --> Turn
+    Console --> Conv
+    Turn --> Tools --> Instr
+    Turn --> LLM
+    Instr --> Tickets & Help & Conv
+    Services --> DB[("SQLite nexo.db + mastra.db")]
+```
 
-1. **Estado da conversa.** `closed` rejeita; limite de 30 mensagens rejeita; com analista envolvido (`waiting_analyst`/`analyst`) a mensagem é gravada e o agent fica em pausa.
-2. **Pergunta pendente (human-in-the-loop).** Se a tool `open-ticket` parou a run do agent para perguntar algo (impacto, urgência, o que faltar), a resposta do funcionário **retoma a run de onde parou** (`resumeStream` do Mastra); "Cancelar" descarta. O modelo continua com a resposta no contexto, sem um turno novo do zero.
-3. **Ação pendente (rascunho).** "Confirmar" executa a ação de forma determinística (criar/complementar/reabrir chamado); "Cancelar" descarta; "Editar X" reabre a pergunta X do flow. Texto livre vai ao agent com o rascunho no contexto.
-4. **Flow ativo (chat-formulário).** Sem LLM: a próxima pergunta, com opções, ou a conclusão. Hoje só é usado pelo "Editar X" do rascunho; os passos (tipo, título, descrição, categoria, impacto, urgência, afetados) são os mesmos que a tool `open-ticket` percorre.
-5. **Agent (LLM).** Recebe as últimas 20 mensagens e um contexto curto (quem é o usuário, data, rascunho pendente). Decide entre as tools: `search-help-center`, `cite-articles`, `suggest-help-article`, `list-my-tickets`, `get-my-ticket`, `open-ticket`, `add-ticket-update`, `reopen-ticket`, `transfer-to-analyst`, mais `suggest-quick-replies` e `report-decision`.
+`engine` nunca importa `assistants/*`; a persona importa `engine` e `services`; `services` não sabe o que é agent. O agent só vê dados por tools, e as tools recebem o usuário logado pelo `requestContext`: privacidade garantida no código, não no prompt. Contratos e invariantes em [docs/brain/index.md](docs/brain/index.md).
 
-**Resolver pela central antes do chamado**: as instruções mandam identificar o problema e buscar na central (`search-help-center`), que devolve artigos **e** soluções de casos que analistas já resolveram. Quando um resultado traz um procedimento que deve resolver, o agent não cola o texto: chama `suggest-help-article`, que mostra o artigo como card, pergunta "isso resolveu?" (Resolveu / Não resolveu / Falar com um analista) e pausa a run, como o `open-ticket`. A resposta grava o acerto ou erro por artigo (tabela `help_feedback`, métricas em `GET /api/analyst/help-center/metrics`) e volta ao modelo com o próximo passo: resolvido encerra sem chamado; não resolvido chama `open-ticket` na mesma run, com o que já foi tentado na descrição; e o chamado criado fica vinculado à sugestão que falhou. Quando o analista resolve o chamado (`POST /api/analyst/tickets/:id/resolve` com a solução em texto), a solução vira memória pesquisável pelo agent, só com título, categoria e solução: descrição e dados do funcionário nunca entram (privacidade do Anexo A). Respostas informativas (horário, prazos) continuam no texto com `cite-articles`, sem perguntar se resolveu.
+## 3. Como o agent decide
 
-**Abrir um chamado**: o agent extrai o que o funcionário já disse e chama `open-ticket` com título, descrição, tipo (INC/REQ) e categoria em JSON validado por zod. A própria tool percorre os passos que faltam: para cada um, suspende a run com a pergunta e as opções (`context.agent.suspend`), o engine persiste o `runId` na conversa e responde ao funcionário; a resposta seguinte retoma a run e a tool roda de novo com a resposta (`resumeData`). No fim ela classifica prioridade, verifica duplicidade e devolve o rascunho, que ainda precisa de confirmação. O snapshot da run fica em SQLite (`@mastra/libsql`, arquivo `mastra.db`), então sobrevive a reinício.
+Cada mensagem passa por `src/engine/conversation/turn.ts` nesta ordem ([Turn](docs/brain/functions/Turn.md)):
 
-Decisões que **não** ficam com o modelo: prioridade (matriz impacto × urgência do Anexo A), prazo (horas/dias úteis), duplicidade e reabertura (similaridade lexical sobre os chamados do próprio funcionário), privacidade (filtro por usuário nas tools), confirmação (qualquer escrita vira rascunho antes), escopo (`open-ticket` recusa pedidos com sinal claro de RH/financeiro/facilities e nenhum sinal de TI; `src/assistants/nexo/scope.ts`), transferência automática de chamado crítico e escalonamento por confiança: na primeira resposta com confiança baixa o engine oferece um analista; se a seguinte também for baixa, transfere sozinho (motivo `low_confidence`), e o caso aparece no console como "Agent pediu ajuda".
+```mermaid
+flowchart TD
+    Msg([Mensagem do funcionário]) --> Estado{Conversa com analista, encerrada ou no limite?}
+    Estado -- sim --> Grava["Grava e não responde (ou 409)"]
+    Estado -- não --> Run{Run pausada numa pergunta?}
+    Run -- sim --> Resume["Retoma a run de onde parou (resumeStream)"]
+    Run -- não --> Rasc{Rascunho pendente?}
+    Rasc -- Confirmar --> Outbox["Executa sem LLM via outbox"]
+    Rasc -- Editar X --> Flow["Chat-formulário reabre a pergunta X"]
+    Rasc -- "texto livre ou sem rascunho" --> Val{"Tem conteúdo útil? (regex, sem LLM)"}
+    Val -- "não: 'A', '???', 'aaaa', '123'" --> Regra["Responde por regra com atalhos"]
+    Val -- sim --> Agent["Agent: 20 msgs + contexto curto + tools"]
+    Agent --> Dec["report-decision obrigatória: entendeu, fez, segurança, por quê"]
+    Dec --> Baixa{Segurança baixa?}
+    Baixa -- 1ª vez --> Oferece["Oferece 'Falar com um analista'"]
+    Baixa -- 2ª seguida --> Transfere["Transfere sozinho ('Agent pediu ajuda')"]
+```
 
-## Transparência
+Tools: `search-help-center`, `cite-articles`, `suggest-help-article`, `list-my-tickets`, `get-my-ticket`, `open-ticket`, `add-ticket-update`, `reopen-ticket`, `transfer-to-analyst`, mais `suggest-quick-replies` e `report-decision`.
 
-Cada resposta do assistente grava um `trace`: as ações executadas com rótulo humano ("consultou seus chamados", "classificou a prioridade: Alta, impede uma pessoa de trabalhar"), a decisão declarada pelo agent via tool obrigatória `report-decision` (o que entendeu, ação, confiança, porquê), modelo, tokens e duração. No SSE os rótulos chegam em tempo real (evento `action`) antes do texto; o detalhe completo chega no evento `trace` e fica persistido na mensagem.
+**Validação antes do modelo** ([InputPolicy](docs/brain/conventions/InputPolicy.md)): só o texto livre que iria ao agent passa por `src/engine/conversation/inputGuard.ts`. Um caractere solto ("A"), só símbolos ou emoji ("???"), repetição ("aaaa") ou só números ("123") recebem resposta por regra com atalhos ("Abrir um chamado", "Falar com um analista") e o modelo não é chamado. Antes, uma mensagem "A" custava duas chamadas ao modelo (texto + `report-decision`) para responder "não entendi". Respostas a perguntas do chat-formulário, do rascunho e da run pausada ("1", "ok", "sim") nunca passam pela guarda. A política é da persona (`inputPolicy`) e o composer aplica a mesma função antes de enviar.
 
-Na interface, os rótulos aparecem acima de cada resposta (como no protótipo) e o botão **"Por quê?"** abre o detalhe: o que o agent entendeu, o que fez, a segurança (alta, média ou baixa) e o porquê, mais cada passo com o resultado e a origem da resposta (IA, formulário guiado ou regra). No console do analista o mesmo painel ("Ver raciocínio") inclui as observações do engine, modelo, tokens e tempo, e já vem aberto quando a segurança foi baixa. A confiança é categórica, não percentual: o modelo não tem calibração que justifique um número.
+**O que não fica com o modelo** ([ServiceDeskRules](docs/brain/conventions/ServiceDeskRules.md)): validação da mensagem, prioridade (impacto × urgência), prazo em horas úteis, duplicidade e reabertura, privacidade, confirmação de toda escrita, escopo (`open-ticket` recusa pedido com sinal claro de RH/financeiro/facilities e nenhum de TI), transferência automática de chamado crítico e o escalonamento por confiança acima. Lista completa, ponto a ponto, na [seção 10](#10-pontos-de-decisão-regra--ia).
 
-## Console do analista
+## 4. Fluxo ponta a ponta: resolver ou abrir chamado
 
-`/atendente` (logins `fabio.nunes@nexo.com` e `gabriela.castro@nexo.com`): lista com busca e filtros (Todas, Para você, Com o agent, Minhas), etiqueta de status por conversa ("Transferida · INC-20311", "Agent pediu ajuda", "Agent atendendo"), histórico com o raciocínio do agent, resumo da transferência, assumir (agent pausado), responder, devolver ao agent, encerrar e painel com os chamados do funcionário. Atualiza por polling.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor F as Funcionário
+    participant E as Engine (turno)
+    participant A as Agent (LLM)
+    participant T as Tool open-ticket / suggest-help-article
+    participant L as Legado (chamados)
+    F->>E: "minha VPN dá erro 809"
+    E->>A: run com tools
+    A->>T: search-help-center → suggest-help-article(kb-vpn-809)
+    T-->>F: card do artigo + "isso resolveu?" (run pausada, snapshot em mastra.db)
+    F->>E: "Não resolveu"
+    E->>T: retoma a run (só a tool roda, zero LLM)
+    T->>A: feedback not_resolved → próximo passo
+    A->>T: open-ticket(título, descrição, tipo, categoria extraídos)
+    T-->>F: pergunta impacto e urgência com opções (pausa de novo)
+    F->>E: responde
+    E->>T: retoma: prioridade, prazo, duplicidade (relatedTicketId conferido)
+    T-->>F: rascunho + Confirmar / Editar X / Cancelar
+    F->>E: Confirmar
+    E->>E: 1 transação: tira o rascunho, grava action_queue
+    E->>L: createTicket(idempotencyKey) com retry
+    L-->>F: "Chamado INC-20412 aberto" (crítico → transfere ao analista)
+```
 
-Quando a conversa tem um chamado, o cabeçalho traz **"Ver chamado"**: numa conversa que espera atendente ele assume o atendimento e abre o painel, então ao fechá-lo o analista já está respondendo. O painel começa com o **resumo do assistente** (motivo e resumo da transferência, o que o agent entendeu e fez, passos concluídos, artigos indicados), montado a partir do que já está nas mensagens, sem nova chamada ao modelo. O sistema de chamados acompanha a conversa: transferir põe o chamado vinculado em "Aguardando analista" e assumir o leva a "Em atendimento" (ganchos da persona em `src/assistants/nexo/hooks.ts`; se o legado estiver fora, a conversa muda e o chamado fica como estava). Os dois lados veem "digitando…": quem digita avisa o servidor a cada 1,5 s e o outro lado lê a presença no polling que já faz (em memória, expira em 4 s, nada persistido).
+Perguntas intermediárias não chamam o LLM. "Resolveu" encerra sem chamado e grava o acerto do artigo ([HelpFeedback](docs/brain/entities/HelpFeedback.md)); a solução que o analista escreve ao resolver vira memória pesquisável, só título, categoria e solução ([ResolutionMemory](docs/brain/entities/ResolutionMemory.md)). Detalhes: [HumanInTheLoop](docs/brain/services/HumanInTheLoop.md), [PendingAction](docs/brain/services/PendingAction.md).
 
-## Como a qualidade das decisões é garantida
+## 5. Estados e dados
 
-- Regras do service desk em código testado (`src/services/tickets/*.test.ts`), não em prompt.
-- Efeitos colaterais só por ação confirmada; o executor roda sem LLM.
-- Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. O sistema legado simulado fica indisponível às vezes (`NEXO_TICKETS_OUTAGE_RATE`); há retry com backoff.
-- Confirmações seguem o padrão outbox: ao confirmar, o rascunho sai da conversa e a ação entra em `action_queue` na mesma transação, e só depois é executada. Se o sistema de chamados estiver fora, ela fica na fila e é registrada quando ele volta; se o processo cair no meio, um worker retoma o item. Nos dois casos o resultado é postado na conversa, e a chave de idempotência impede gravação dupla.
-- Sem duplicidade em três camadas: o agent indica o chamado relacionado quando reconhece o mesmo problema com outras palavras (o flow confere se é do funcionário); o flow compara por similaridade ao montar o rascunho; e o serviço recompara na transação de gravação, o que cobre rascunhos paralelos e pedidos que esperaram na fila. Cada rascunho tem uma chave de idempotência única no banco: confirmar duas vezes ou reprocessar a fila não grava duas vezes. Testes de ponta a ponta em `src/assistants/nexo/flows/dedup.validation.test.ts`.
-- Testes de orquestração com runner roteirizado (sem rede) e teste de integração com modelo Mastra simulado cobrindo tool call + `requestContext`.
-- Instruções obrigam `report-decision`; o engine usa a confiança declarada como gatilho de segurança.
+```mermaid
+stateDiagram-v2
+    [*] --> agent
+    agent --> waiting_analyst : transfer-to-analyst, chamado crítico, 2ª confiança baixa
+    waiting_analyst --> analyst : analista assume (agent pausado)
+    agent --> analyst : analista assume
+    analyst --> agent : devolve
+    waiting_analyst --> agent : devolve sem assumir
+    agent --> closed : encerra
+    analyst --> closed : encerra
+```
 
-## API
+```mermaid
+erDiagram
+    conversations ||--o{ messages : "role user/agent/analyst/system"
+    conversations ||--o| tickets : "ticket_id vinculado"
+    conversations ||--o{ action_queue : "ação confirmada"
+    tickets ||--o{ ticket_updates : "complementos"
+    tickets ||--o| resolution_memories : "solução do analista"
+    messages ||--o{ help_feedback : "isso resolveu?"
+    conversations {
+        text state
+        text pending_action
+        text suspended_run
+        int user_message_count
+    }
+    tickets {
+        text status
+        text priority
+        text due_at
+        text idempotency_key
+    }
+    action_queue {
+        text status
+        text idempotency_key
+        int attempts
+    }
+```
 
-Autenticação por cookie httpOnly `nexo_session` ou `Authorization: Bearer <token>` (token HMAC assinado). Contrato completo em [`docs/brain/functions/ChatApi.md`](docs/brain/functions/ChatApi.md) e [`AnalystConsoleApi.md`](docs/brain/functions/AnalystConsoleApi.md).
+Só o engine e o analista mudam o estado; só em `agent` o assistente responde. Uma conversa tem no máximo um entre flow ativo, rascunho e run pausada. Migrações versionadas em código ([Persistence](docs/brain/conventions/Persistence.md)).
 
-| Rota | Descrição |
+## 6. Resiliência
+
+```mermaid
+flowchart TD
+    C([Confirmar]) --> Tx["Transação: rascunho sai, action_queue = processing"]
+    Tx --> Exec["Executor sem LLM, idempotencyKey = id do rascunho"]
+    Exec --> R{Resultado}
+    R -- ok --> Done["done: resposta na conversa, link-ticket, crítico transfere"]
+    R -- 503 legado fora --> Q["queued com backoff; worker a cada 5 s; 'aviso quando voltar'"]
+    R -- duplicado apareceu --> Dup["Vira rascunho de complemento (nova confirmação)"]
+    R -- erro de regra --> Fail["failed: rascunho volta com nova chave"]
+    Q --> Exec
+    Crash["Processo caiu em processing > 2 min"] --> Q
+```
+
+- Chave de idempotência única em `tickets`/`ticket_updates`: reexecutar nunca grava duas vezes ([ActionQueue](docs/brain/services/ActionQueue.md)).
+- Duplicidade em três camadas: o agent indica o chamado relacionado, o rascunho compara por similaridade, o serviço recompara na transação de gravação.
+- Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. Legado fora (`NEXO_TICKETS_OUTAGE_RATE`) tem retry com backoff ([LegacyOutage](docs/brain/conventions/LegacyOutage.md)).
+- Testes: regras em `src/services/tickets/*.test.ts`, runner roteirizado sem rede, integração com modelo Mastra simulado, ponta a ponta de duplicidade em `src/assistants/nexo/flows/dedup.validation.test.ts`.
+
+## 7. Transparência
+
+Cada resposta grava um `trace` ([DecisionTrace](docs/brain/entities/DecisionTrace.md)): ações com rótulo humano ("consultou seus chamados", "classificou a prioridade: Alta"), a decisão de `report-decision` (o que entendeu, o que fez, segurança alta/média/baixa, por quê), modelo, tokens e duração. No SSE os rótulos chegam antes do texto. Para o funcionário ficam acima da resposta ("consultou seus chamados", "montou o chamado"), sem painel técnico; no console do analista, **"Ver raciocínio"** abre o detalhe completo (decisão, passos, notas do engine, modelo, tokens) e já vem aberto quando a segurança foi baixa. A confiança é categórica porque o modelo não tem calibração que justifique um percentual.
+
+## 8. API
+
+Cookie httpOnly `nexo_session` ou `Authorization: Bearer <token>` (HMAC). Contratos: [ChatApi](docs/brain/functions/ChatApi.md), [AnalystConsoleApi](docs/brain/functions/AnalystConsoleApi.md).
+
+| Rota | |
 |---|---|
 | `POST /api/auth/login` `{email,password}` · `GET /api/auth/me` · `POST /api/auth/logout` | sessão |
-| `GET/POST /api/conversations` · `GET /api/conversations/:id` | minhas conversas |
-| `POST /api/conversations/:id/messages` `{text}` ou `{optionId}` | turno; com `Accept: text/event-stream` responde SSE |
-| `GET /api/conversations/:id/messages?after=<id>` | polling de respostas do analista |
+| `GET/POST /api/conversations` · `GET /api/conversations/:id` · `GET .../:id/messages?after=` | minhas conversas e polling |
+| `POST /api/conversations/:id/messages` `{text}` ou `{optionId}` | turno; `Accept: text/event-stream` responde SSE |
 | `GET /api/tickets` · `GET /api/tickets/:id` · `GET /api/help-center?q=` | só os meus chamados; central |
-| `GET /api/analyst/conversations?state=&q=` · `GET .../:id` · `POST .../:id/take|messages|return|close` · `GET /api/analyst/employees/:id/tickets` | console do analista |
-
-Roteiro rápido com curl:
+| `GET /api/analyst/conversations?state=&q=` · `.../:id` · `POST .../:id/take\|messages\|return\|close` · `POST /api/analyst/tickets/:id/resolve` | console |
 
 ```bash
 T=$(curl -s localhost:3000/api/auth/login -H 'content-type: application/json' -d '{"email":"ana.souza@nexo.com","password":"x"}' | jq -r .token)
 C=$(curl -s -X POST localhost:3000/api/conversations -H "authorization: Bearer $T" | jq -r .id)
-curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $T" -H 'accept: text/event-stream' \
-  -H 'content-type: application/json' -d '{"text":"minha vpn dá erro 809"}'
+curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $T" -H 'accept: text/event-stream' -H 'content-type: application/json' -d '{"text":"minha vpn dá erro 809"}'
 ```
 
-## Deploy
+## 9. Decisões e trade-offs
 
-A imagem Docker do repositório sobe em qualquer PaaS que construa a partir de um `Dockerfile`. Duas opções com plano gratuito e sem cartão no cadastro (confirme as condições atuais ao criar a conta):
+| Decisão | Alternativa rejeitada | Por quê |
+|---|---|---|
+| **Mastra + model router** (`NEXO_MODEL=openai/gpt-6-luna`) | SDK do provedor no projeto | tools tipadas com zod, `requestContext`, stream de tool calls, suspend/resume; trocar de provedor é mudar uma string; instruções estáveis entram no cache de prompt |
+| **Human-in-the-loop dentro da run** | chat-formulário fora do agent | o modelo retoma com a resposta no contexto; perguntas intermediárias custam zero LLM; depende de `__registerMastra` (API interna), coberto por teste |
+| **Tipo/categoria sem LLM extra** | classificador por mensagem | o agent pré-preenche o que extraiu e a tool pergunta o resto com opções; previsível, ao preço de uma pergunta a mais |
+| **Busca e duplicidade lexicais** | RAG / embeddings | determinístico e suficiente para dezenas de itens; sinônimos ficam com o `relatedTicketId` que o agent indica e o código confere; embeddings entram trocando só `searchKnowledge` |
+| **Outbox em SQLite, worker no processo** | executar na hora e torcer | confirmação nunca se perde; em produção o worker seria dedicado e a presença "digitando…" iria para um store compartilhado |
+| **Polling no console** | SSE por conversa | funciona em qualquer hospedagem; SSE é o passo seguinte |
+| **Confiança categórica** | percentual | o modelo não é calibrado; um número daria precisão falsa |
+| **Validação de entrada por regex** | classificador por mensagem | pega o caso barato e frequente (caractere solto, símbolos, repetição, só números) a custo zero e sem falso positivo em mensagens curtas legítimas ("oi", "vpn"); palavras reais sem sentido ainda vão ao modelo, que pede detalhes |
 
-**Koyeb (recomendado: deploy direto do GitHub).** Create Web Service → GitHub → este repositório → builder *Dockerfile* → instância *Free* → porta `3000`, health check HTTP em `/entrar`. Variáveis de ambiente (marque as duas primeiras como *secret*): `OPENAI_API_KEY`, `NEXO_AUTH_SECRET` (16+ caracteres aleatórios), `NODE_ENV=production`, `NEXO_DB_PATH=/app/data/nexo.db`. Cada push em `main` redeploya.
+Próximos passos: guardrails por classificador com confiança (`NEXO_FAST_MODEL`, `inputProcessors` do Mastra) para escopo, INC/REQ e texto sem sentido que o regex não pega; promover memória recorrente a artigo da FAQ; multi-persona (tabela de personas, chaves por integrador); avaliação automática com conversas de referência contra o modelo real.
 
-**Hugging Face Spaces (alternativa).** New Space → SDK *Docker* → envie o repositório para o Space (`git remote add hf …`) com um `README.md` que comece pelo cabeçalho `sdk: docker` e `app_port: 3000`; as variáveis acima vão em *Settings → Variables and secrets*. O Space gratuito dorme após 48 h sem acesso e acorda no primeiro pedido.
+## 10. Pontos de decisão: regra × IA
 
-O que esperar e como proteger:
+Cada ponto em que o sistema decide algo, quem decide e por quê. Regra = código determinístico testado, custo zero de modelo. IA = o modelo decide dentro do que as tools permitem. Nos pontos mistos, a IA propõe e a regra confere.
 
-- **Disco efêmero.** No plano gratuito o SQLite não sobrevive a redeploy nem a reinício da instância: o banco é recriado e semeado no primeiro acesso, conversas da demonstração se perdem. Localmente e no Docker Compose a persistência é completa (volume). Próximo passo para persistir na nuvem grátis: trocar `node:sqlite` por libsql remoto (Turso, plano gratuito), já que o Mastra usa `@mastra/libsql`.
-- **Chaves e custo.** Chaves só em variáveis de ambiente (nada no repositório; `assertRuntimeEnv` recusa subir sem elas). Defina um limite de gasto na conta do provedor do modelo; o projeto já limita a 30 mensagens por conversa, janela de 20 mensagens, `maxSteps` por turno e usa cache de prompt. Não há rate limit por IP: se o link ficar público por muito tempo, coloque um proxy com limite na frente ou restrinja os e-mails do seed.
+| Ponto | Quem decide | Onde | Por quê |
+|---|---|---|---|
+| Mensagem tem conteúdo útil? | Regra (regex/contagem; política por persona) | `engine/conversation/inputGuard.ts`, `turn.ts` | Caractere solto ou símbolos custavam duas chamadas ao modelo para responder "não entendi". |
+| Conversa aceita mensagem? (encerrada, limite de 30, analista na conversa) | Regra | `turn.ts` | Estado é fato, não interpretação. |
+| "Confirmar", "cancelar", "editar X" diante do rascunho; cancelar uma pergunta | Regra (opção clicada ou regex de texto curto); texto ambíguo vai à IA com o rascunho no contexto | `engine/actions/pending.ts`, `engine/flows/runner.ts` | Confirmação de efeito colateral não pode depender de interpretação. |
+| Quais perguntas faltam para o chamado (impacto, urgência, afetados…) e em que ordem | Regra (passos do chat-formulário; a tool pergunta pausando a run) | `assistants/nexo/flows/openTicket.ts`, `tools/ticketActions.ts` | Responder às perguntas reexecuta só a tool: zero chamadas ao modelo. |
+| Tipo (INC/REQ) e categoria | IA pré-preenche quando o funcionário já disse; regra pergunta com opções quando falta | `tools/ticketActions.ts` | Sem LLM extra; uma pergunta a mais quando há dúvida. |
+| Prioridade e prazo | Regra (matriz impacto × urgência do Anexo A; horas/dias úteis) | `services/tickets/priority.ts`, `sla.ts` | Regra de negócio auditável; o modelo não arbitra prioridade. |
+| É duplicado ou reabertura? | IA indica o chamado relacionado quando reconhece paráfrase; regra confere em três camadas (flow, rascunho, transação) | `services/tickets/dedup.ts`, `ticketService.ts` | A IA cobre sinônimos a custo zero; a regra impede gravação dupla mesmo em paralelo. |
+| Assunto é de TI? | Instrução ao modelo + guarda lexical conservadora na `open-ticket` | `assistants/nexo/scope.ts` | Sinal claro de RH/financeiro/facilities nunca vira chamado; na dúvida o modelo decide. |
+| Quais chamados o funcionário pode ver | Regra (filtro por usuário em toda tool) | `tools/tickets.ts`, `services/tickets` | Privacidade no código, não no prompt. |
+| Criar, complementar ou reabrir chamado | Regra: só após "Confirmar", pelo outbox com chave de idempotência | `turn.ts`, `engine/actions/queue.ts` | Nenhum efeito colateral depende de o modelo "prometer". |
+| Transferir para analista | IA chama a tool (pedido, crítico, vencido, insegurança); regra transfere sozinha ao criar chamado crítico e após duas respostas seguidas com confiança baixa | `tools/transfer.ts`, `actions.ts`, `turn.ts` | O modelo reconhece o caso; o engine garante os casos do Anexo A sem depender dele. |
+| "Isso resolveu?" | Regra para clique e respostas claras; IA lê o texto quando ambíguo (`unclear`) | `tools/helpCenter.ts` | Métrica de resolução sem gastar modelo nos casos óbvios. |
+| Buscar na central de ajuda e nas soluções de analistas | Regra (busca lexical: título > tags > corpo) | `services/helpCenter/helpCenterService.ts` | Determinística e suficiente para dezenas de itens; embeddings quando a base crescer. |
+| Qual artigo se aplica e o que dizer ao funcionário | IA | `instructions.ts`, tools `suggest-help-article` / `cite-articles` | É o trabalho do modelo: entender o problema e conduzir. |
+| Entender o problema, pedir detalhes, redigir a resposta | IA | `instructions.ts` | Idem; as instruções limitam o tom e proíbem inventar status e procedimentos. |
+| Confiança da resposta | IA declara (`report-decision`, categórica); regra usa como gatilho de segurança | `engine/tools/wrap.ts`, `turn.ts` | Autodeclaração não é calibrada, por isso vira categoria e gatilho, não percentual. |
 
-## Trade-offs e próximos passos
-
-- **Human-in-the-loop do Mastra em vez de flow fora do agent.** A primeira versão fazia as perguntas num chat-formulário sem LLM; o modelo só via o resultado. Agora a tool pergunta de dentro da run e o modelo retoma com a resposta no contexto. Custo: o modelo roda só ao abrir e ao concluir; responder às perguntas intermediárias reexecuta apenas a tool (zero chamadas ao LLM, coberto por teste). Dependemos de `__registerMastra` (API interna do Mastra) para compartilhar o storage entre Agents criados por turno — coberto por teste de integração.
-- **Tipo/categoria sem LLM extra.** O agent pré-preenche o que já sabe pela extração estruturada; a tool pergunta o resto com opções. Zero custo e previsível, ao preço de uma pergunta a mais quando o agent não tem certeza.
-- **Guardrails por classificador (próximo passo).** Um classificador com confiança (modelo rápido em `NEXO_FAST_MODEL`, ou um serviço de decisão do provedor) antes do agent, para duas coisas: escopo (TI vs. RH/financeiro/facilities, hoje instrução + guarda lexical conservadora na `open-ticket`) e tipo INC/REQ, caindo para a pergunta só abaixo de um limiar. Ponto de encaixe: `inputProcessors` do Agent Mastra (roda antes do modelo) ou uma tool de classificação.
-- **Central de ajuda lexical, sem RAG.** A busca sobre artigos e memórias de resolução é por tokens (título > tags > corpo); com poucas dezenas de itens basta e é determinística. Próximo passo com base maior: embeddings (ou grafo artigo ↔ caso resolvido) trocando só `searchKnowledge`. A interpretação de texto livre em "isso resolveu?" cobre só os casos claros; o resto fica `unclear` e o modelo decide. Promover uma memória que resolve repetidamente a artigo da FAQ ainda é manual.
-- **Duplicidade sem busca semântica.** A similaridade é lexical (Jaccard sobre tokens) e não pega sinônimos ("PC demorando depois do update" × "Notebook lento após atualização"). Com poucos chamados por funcionário, o próprio agent indica o chamado relacionado (`relatedTicketId`) e o código confere, sem custo extra. Com a base maior: busca semântica (embeddings dos chamados do funcionário) como camada determinística.
-- **Fila em processo.** O worker da fila roda dentro do servidor (`setInterval`); o claim atômico evita trabalho duplo entre instâncias, mas em produção seria um worker dedicado.
-- **Polling para o analista.** Simples e funciona em qualquer hospedagem; um canal SSE de assinatura por conversa seria o passo seguinte. A presença "digitando" pega carona nesse polling e fica em memória do processo; com mais de uma instância iria para um store compartilhado.
-- **Multi-persona.** O engine já isola a persona (`AssistantConfig`) e grava `assistant_id`; falta tabela de personas, chaves de API por integrador e endpoints de administração.
-- **Migrações.** Versionadas em código, sem ferramenta externa; suficiente para SQLite.
-- **Sem avaliação automática do agent.** Próximo passo: um conjunto de conversas de referência rodando contra o modelo real, com asserções sobre as tools chamadas e o `report-decision`.
+**Em escala.** As validações de entrada são configuração da persona, não constante do código: `AssistantConfig.inputPolicy` define mínimo de caracteres, se aceita só números, a classe de caracteres permitidos, a dica e os atalhos da resposta; o cliente recebe a mesma política em `conversation.inputPolicy` e bloqueia antes de enviar. Como produto, isso vira um registro por tenant com tela de administração (a mesma tabela de personas prevista em multi-persona), e as notas do trace (`entrada sem conteúdo útil (<motivo>)`) permitem medir quantas mensagens foram barradas e ajustar a política sem tocar em código. A validação continua obrigatória em qualquer configuração: o que muda é o quão permissiva ela é.

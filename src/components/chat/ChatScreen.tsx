@@ -14,6 +14,7 @@ import {
   type TicketView,
   type TraceAction,
 } from "@/lib/api";
+import { checkInput } from "@/engine/conversation/inputGuard";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import styles from "./Chat.module.css";
@@ -177,6 +178,11 @@ export function ChatScreen() {
   }
 
   const blocked = conversation?.state === "closed" || (!!conversation && conversation.userMessages >= conversation.limit);
+  /** Mesma validação determinística do servidor; sem conversa ainda, valem os defaults do engine. */
+  const validate = (text: string) => {
+    const r = checkInput(text, conversation?.inputPolicy);
+    return r.ok ? undefined : r.message;
+  };
   return (
     <>
       <TopBar here="Atendimento" status={STATUS[conversation?.state ?? "agent"]} />
@@ -200,6 +206,7 @@ export function ChatScreen() {
         placeholder={blocked ? "Comece uma nova conversa para continuar" : undefined}
         onSend={(text) => void send({ text }, text)}
         onTyping={notifyTyping}
+        validate={validate}
         meta={
           conversation && (
             <>

@@ -163,3 +163,65 @@ test("limites: conversa encerrada e limite de mensagens", async () => {
   await assert.rejects(runTurn({ conversationId: closed.id, user: ana(), input: { text: "oi" }, runner }), { code: "CONVERSATION_CLOSED" });
   await assert.rejects(runTurn({ conversationId: conv.id, user: getEmployee("emp-bruno")!, input: { text: "oi" }, runner }), { code: "NOT_FOUND" });
 });
+
+test("texto livre sem conteúdo útil é respondido por regra, sem chamar o modelo", async () => {
+  const conv = newConv();
+  let runs = 0;
+  const runner = scriptedRunner(() => { runs += 1; return "não deveria rodar"; });
+  for (const text of ["A", "???", "😀", "aaaa", "123"]) {
+    const r = await runTurn({ conversationId: conv.id, user: ana(), input: { text }, runner });
+    assert.equal(r.messages.length, 1, text);
+    const m = r.messages[0]!;
+    assert.equal(m.trace!.source, "rule");
+    assert.match(m.trace!.notes![0]!, /^entrada sem conteúdo útil \((too_short|no_words|repeated|digits_only)\): respondida por regra, sem chamar o modelo$/);
+    assert.match(m.content, /minha VPN dá erro 809/);
+    const options = m.payload!.find((p) => p.kind === "options")!.data as { id: string }[];
+    assert.deepEqual(options.map((o) => o.id), ["abrir-um-chamado", "falar-com-um-analista"]);
+  }
+  assert.equal(runs, 0);
+  assert.equal(getConversation(conv.id)!.userMessageCount, 5); // a mensagem é gravada e conta no limite
+  assert.equal(listMessages(conv.id).filter((m) => m.role === "user").at(-1)?.content, "123");
+});
+
+test("a guarda não se aplica a respostas de flow, rascunho, run suspensa nem a clique em opção", async () => {
+  const { updateConversation } = await import("@/services/conversations/conversationService");
+  const runner = scriptedRunner(() => "ok");
+
+  // Flow ativo: "1" escolhe a primeira opção do passo (tipo), sem passar pela guarda.
+  const flowConv = newConv();
+  updateConversation(flowConv.id, { activeFlow: { flowId: "open-ticket", data: {}, stepIndex: 0, startedAt: "" } });
+  const f = await runTurn({ conversationId: flowConv.id, user: ana(), input: { text: "1" }, runner });
+  assert.equal(f.messages[0]!.trace!.source, "flow");
+  assert.equal(getConversation(flowConv.id)!.activeFlow?.data.type, "INC");
+
+  // Rascunho: "não" cancela por regra; texto livre sem conteúdo ("A") também não chega ao modelo.
+  const draftConv = newConv();
+  const pending = { kind: "create-ticket", input: {}, draft: {}, label: "criar chamado", createdAt: "" };
+  updateConversation(draftConv.id, { pendingAction: pending });
+  const a = await runTurn({ conversationId: draftConv.id, user: ana(), input: { text: "A" }, runner });
+  assert.equal(a.messages[0]!.trace!.source, "rule");
+  assert.match(a.messages[0]!.trace!.notes![0]!, /too_short/);
+  assert.ok(getConversation(draftConv.id)!.pendingAction); // o rascunho continua lá
+  const c = await runTurn({ conversationId: draftConv.id, user: ana(), input: { text: "não" }, runner });
+  assert.match(c.messages[0]!.content, /descartei o rascunho/);
+
+  // Run suspensa: a resposta vai à retomada (a tool decide), nunca à guarda.
+  const hitlConv = newConv();
+  updateConversation(hitlConv.id, { suspendedRun: { runId: "r1", toolCallId: "c1", toolId: "open-ticket", prompt: { text: "Quem é afetado?" }, startedAt: "" } });
+  const resumes: unknown[] = [];
+  const resumeRunner: typeof runner = async (p) => {
+    resumes.push(p.resume);
+    p.onTextDelta("retomei");
+    return { text: "retomei", model: "mock", usage: { inputTokens: 1, outputTokens: 1 } };
+  };
+  const h = await runTurn({ conversationId: hitlConv.id, user: ana(), input: { text: "A" }, runner: resumeRunner });
+  assert.deepEqual(resumes, [{ runId: "r1", toolCallId: "c1", data: { text: "A" } }]);
+  assert.equal(h.messages[0]!.trace!.source, "agent");
+
+  // Clique em opção: o conteúdo é o rótulo; o id nunca é validado.
+  const optConv = newConv();
+  let runs = 0;
+  const counting = scriptedRunner(() => { runs += 1; return "ok"; });
+  await runTurn({ conversationId: optConv.id, user: ana(), input: { optionId: "x" }, runner: counting });
+  assert.equal(runs, 1);
+});

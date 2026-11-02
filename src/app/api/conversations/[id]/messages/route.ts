@@ -5,6 +5,7 @@ import { getConversation, listMessages } from "@/services/conversations/conversa
 import { assertConversationAccess, publicConversation } from "@/engine/conversation/view";
 import { runTurn, turnAsEventStream } from "@/engine/conversation/turn";
 import { typingState } from "@/engine/conversation/presence";
+import { DEFAULT_INPUT_POLICY } from "@/engine/conversation/inputGuard";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,8 @@ export const GET = route(async (req, { params }: IdParams) => {
   });
 });
 
-const body = z.object({ text: z.string().max(4000).optional(), optionId: z.string().max(80).optional() })
+// Teto HTTP fixo; a política da persona (`inputPolicy`) só pode ser mais restritiva e responde por regra, não com 400.
+const body = z.object({ text: z.string().max(DEFAULT_INPUT_POLICY.maxChars).optional(), optionId: z.string().max(80).optional() })
   .refine((b) => (b.text?.trim() || b.optionId), { message: "informe text ou optionId" });
 
 /**

@@ -8,10 +8,10 @@ Contrato HTTP do funcionário. Código: `src/app/api/auth/*`, `src/app/api/conve
 - `GET /api/conversations` → `PublicConversation[]` com `lastMessage`. `POST /api/conversations {assistantId?}` → 201 `PublicConversation`.
 - `GET /api/conversations/:id` → `{ conversation, messages }`. `GET /api/conversations/:id/messages?after=<id>` → `{ conversation, messages (id maior), typing: { analyst } }` (polling; `typing.analyst` = analista digitando agora).
 - `POST /api/conversations/:id/typing` (role `employee`, dona da conversa) → `{ ok }`: marca "digitando" por 4 s (`src/engine/conversation/presence.ts`, em memória, não persiste); o cliente reenvia a cada ~1,5 s enquanto digita e só com analista envolvido. 409 `CONVERSATION_CLOSED`. Enviar mensagem limpa a marca.
-- `POST /api/conversations/:id/messages {text} | {optionId, text?}` (role `employee`): com `Accept: text/event-stream` → SSE; senão → `{ conversation, messages }`. Erros 409 `CONVERSATION_CLOSED` / `MESSAGE_LIMIT`, 502 `AGENT_ERROR`.
+- `POST /api/conversations/:id/messages {text} | {optionId, text?}` (role `employee`): com `Accept: text/event-stream` → SSE; senão → `{ conversation, messages }`. Erros 409 `CONVERSATION_CLOSED` / `MESSAGE_LIMIT`, 502 `AGENT_ERROR`; `text` acima de 4000 caracteres → 400 `INVALID_BODY`. Texto livre sem conteúdo útil não é erro: recebe resposta `source: rule` ([InputPolicy](../conventions/InputPolicy.md)).
 - `GET /api/tickets?open=` → `TicketView[]` (só os meus). `GET /api/tickets/:id` → `{ ticket, updates }` (404 se de outro). `GET /api/help-center?q=`.
 
-`PublicConversation`: `id, assistantId, employeeId, analystId, state, ticketId, userMessages, limit, activeFlowId, suspendedTool, hasPendingAction, transferReason, transferSummary, createdAt, updatedAt`. Nunca expõe `pendingAction.input` nem o `runId` da run suspensa (`suspendedTool` é só o id da tool que perguntou).
+`PublicConversation`: `id, assistantId, employeeId, analystId, state, ticketId, userMessages, limit, activeFlowId, suspendedTool, hasPendingAction, transferReason, transferSummary, inputPolicy, createdAt, updatedAt`. `inputPolicy` = política de validação da persona sem `options` (`minChars, maxChars, minDistinctAlnum, allowDigitsOnly, allowedChars?, hint?`), para o cliente aplicar a mesma regra. Nunca expõe `pendingAction.input` nem o `runId` da run suspensa (`suspendedTool` é só o id da tool que perguntou).
 
 ## Mensagem
 

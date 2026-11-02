@@ -3,6 +3,7 @@
  * @wiki docs/brain/services/AssistantConfig.md
  */
 import type { Tool } from "@mastra/core/tools";
+import type { InputPolicy } from "./conversation/inputGuard";
 
 // ---- Conteúdo estruturado das mensagens ----
 
@@ -224,6 +225,11 @@ export interface AssistantConfig {
   /** Executores de ações pendentes. */
   actions: Record<string, (input: Record<string, unknown>, ctx: ActionContext) => Promise<ActionResult>>;
   limits: { maxUserMessages: number; maxSteps: number; historyWindow: number };
+  /**
+   * Validação determinística do texto livre antes do modelo (mínimo de caracteres, só números, caracteres permitidos,
+   * dica e atalhos da resposta por regra). Ausente = `DEFAULT_INPUT_POLICY`. Ver `conversation/inputGuard.ts`.
+   */
+  inputPolicy?: Partial<InputPolicy>;
   /** Mensagem de sistema por requisição (nome do usuário, data...). Mantida curta e fora do cache. */
   contextFor?: (ctx: { userId: string; now: Date }) => string | undefined;
   /** Texto quando a conversa está com analista. */

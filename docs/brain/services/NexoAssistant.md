@@ -29,5 +29,6 @@ Executores (`actions.ts`): `create-ticket` (crítico → transfer automático), 
 - Tipo e categoria **não** usam LLM extra: o agent pré-preenche quando tem certeza; a tool pergunta com opções quando não. Impacto e urgência são sempre perguntados ao funcionário (matriz do Anexo A). `fastModel` fica reservado para um classificador/guardrail futuro.
 - Modelo único `openai/gpt-6-luna` (`NEXO_MODEL`, formato `provedor/modelo`), `maxSteps: 8` (busca → sugestão → retomada → `open-ticket` → `report-decision`), janela de 20 mensagens, limite de 30 mensagens do funcionário.
 - O flow `open-ticket` continua registrado em `flows` só para "Editar X" do rascunho ([FlowEngine](FlowEngine.md)).
+- `inputPolicy` da Nexo usa os defaults do engine e acrescenta só a dica (`"minha VPN dá erro 809"…`) e os atalhos `abrir-um-chamado` / `falar-com-um-analista` da resposta por regra ([InputPolicy](../conventions/InputPolicy.md)). Clique no atalho vira o rótulo em texto e segue ao agent normalmente.
 
 Ver [HumanInTheLoop](HumanInTheLoop.md), [PendingAction](PendingAction.md), [ServiceDeskRules](../conventions/ServiceDeskRules.md).

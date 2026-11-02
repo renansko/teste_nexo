@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   ArrowLeft, Bot, Check, ChevronDown, CircleCheck, Headset, Info, LoaderCircle, MessagesSquare, PanelRight, SendHorizontal, Ticket, Undo2,
   UserRoundCheck, X,
@@ -335,7 +335,7 @@ function Dock({
     void analystApi.typing(c.id).catch(() => undefined);
   }
 
-  async function submit(e: FormEvent) {
+  async function submit(e: { preventDefault: () => void }) {
     e.preventDefault();
     const value = text.trim();
     if (!value || busy) return;
@@ -362,6 +362,10 @@ function Dock({
             }}
             placeholder={`Responder a ${first}…`}
             maxLength={4000}
+            onKeyDown={(e) => {
+              // Ctrl/Cmd+Enter também envia (o modificador cancela o submit implícito do navegador).
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void submit(e);
+            }}
             autoFocus
           />
           <button type="submit" className={styles.send} disabled={!text.trim() || !!busy} aria-label="Enviar">

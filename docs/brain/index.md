@@ -39,6 +39,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [Environment](conventions/Environment.md) — Variáveis validadas com zod, provedor do LLM e checagem no boot.
 - [Persistence](conventions/Persistence.md) — SQLite, migrações, JSON em colunas.
 - [FrontendUI](conventions/FrontendUI.md) — Rotas do front, sessão, SSE/polling, cards, console do analista e painel de decisão.
+- [InputPolicy](conventions/InputPolicy.md) — Validação determinística do texto livre antes do modelo; política por persona; resposta por regra.
 
 ## Produto
 
@@ -47,6 +48,7 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 ## Mapa de símbolos
 
 - `runTurn`, `turnAsEventStream` → [Turn](functions/Turn.md)
+- `checkInput`, `normalizeInput`, `resolveInputPolicy`, `publicInputPolicy`, `DEFAULT_INPUT_POLICY` → [InputPolicy](conventions/InputPolicy.md)
 - `searchKnowledge`, `getKnowledge`, `rememberResolution` → [HelpArticle](entities/HelpArticle.md), [ResolutionMemory](entities/ResolutionMemory.md)
 - `openFeedback`, `answerFeedback`, `linkTicket`, `feedbackMetrics`, `suggestHelpArticle`, `interpretFeedback` → [HelpFeedback](entities/HelpFeedback.md)
 - `resolveTicket` → [ResolutionMemory](entities/ResolutionMemory.md), [TicketService](services/TicketService.md)

@@ -3,6 +3,7 @@
  * (fonte canônica: docs/brain/functions/ChatApi.md). Mudou a API → ajustar só aqui.
  * @wiki docs/brain/conventions/FrontendUI.md
  */
+import type { PublicInputPolicy } from "@/engine/conversation/inputGuard";
 
 // ---------- Tipos do contrato ----------
 
@@ -27,6 +28,8 @@ export interface Conversation {
   /** Código do motivo da transferência (user_request, critical, overdue, low_confidence). */
   transferReason: string | null;
   transferSummary: string | null;
+  /** Política de validação do texto livre (a mesma regra do servidor); o composer bloqueia antes de enviar. */
+  inputPolicy?: PublicInputPolicy;
   createdAt: string;
   updatedAt: string;
 }

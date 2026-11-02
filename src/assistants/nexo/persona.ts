@@ -12,6 +12,7 @@ import { addTicketUpdate, openTicket, reopenTicket } from "./tools/ticketActions
 import { openTicketFlow } from "./flows/openTicket";
 import { nexoActions } from "./actions";
 import { nexoHooks } from "./hooks";
+import { ANALYST_OPTION, OPEN_TICKET_OPTION } from "./payload";
 
 export const nexoAssistant: AssistantConfig = {
   id: "nexo",
@@ -28,6 +29,12 @@ export const nexoAssistant: AssistantConfig = {
     // busca → sugestão (pausa) → retomada → open-ticket → report-decision cabem com folga.
     maxSteps: 8,
     historyWindow: 20,
+  },
+  // Texto livre sem conteúdo útil ("A", "???", "aaaa", "123") não chega ao modelo: o engine responde por regra com estes atalhos.
+  // Mínimos e caracteres permitidos ficam nos defaults do engine (`DEFAULT_INPUT_POLICY`); mude aqui por persona.
+  inputPolicy: {
+    hint: 'Por exemplo: "minha VPN dá erro 809" ou "quero ver meus chamados".',
+    options: [OPEN_TICKET_OPTION, ANALYST_OPTION],
   },
   waitingText: "Um analista está cuidando desta conversa. Sua mensagem foi registrada e ele responderá por aqui.",
   hooks: nexoHooks,

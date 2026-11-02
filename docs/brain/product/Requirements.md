@@ -25,7 +25,7 @@ Todos os itens obrigatórios ("O que construir" 1–7, requisitos técnicos, Ane
 
 ## Pendências
 
-- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista. O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: painel expansível nos passos ([DecisionTrace](../entities/DecisionTrace.md)). Larguras menores conferidas com screenshots (800 e 420 px) em 2026-11-01 ([FrontendUI](../conventions/FrontendUI.md)).
+- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista. O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: rótulos dos passos acima da resposta para o funcionário e painel "Ver raciocínio" no console do analista ([DecisionTrace](../entities/DecisionTrace.md)); o "Por quê?" expansível no chat foi retirado em 2026-11-02 por decisão de produto. Larguras menores conferidas com screenshots (800 e 420 px) em 2026-11-01 ([FrontendUI](../conventions/FrontendUI.md)).
 - "Transferir chamados" (item 4 do PRD): resolvido pelos ganchos da persona — transferir a conversa põe o chamado vinculado em `aguardando_analista` e assumir o leva a `em_atendimento` ([Ticket](../entities/Ticket.md)).
 - Deploy (diferencial): roteiro no [README](../../../README.md) (Koyeb ou Hugging Face Spaces, planos gratuitos); a publicação depende da conta do autor. Limitação do plano gratuito: disco efêmero, o banco é recriado a cada reinício.
 - Escopo: a guarda é lexical e conservadora; classificador com confiança fica como próximo passo ([NexoAssistant](../services/NexoAssistant.md)).

@@ -60,3 +60,20 @@ test("erro de domínio no SSE vira evento error", async () => {
   const j = await call(POST, { headers: as("emp-ana"), params: { id: conv.id }, body: { text: "oi" } });
   assert.equal(j.status, 409);
 });
+
+test("texto sem conteúdo útil responde por regra no SSE (sem ação, sem modelo) e a conversa expõe inputPolicy", async () => {
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  const r = await call(POST, { headers: { ...as("emp-ana"), accept: "text/event-stream" }, params: { id: conv.id }, body: { text: "???" } });
+  const events = String(r.json).trim().split("\n\n").map((block) => {
+    const [ev, data] = block.split("\n");
+    return { type: ev!.replace("event: ", ""), data: JSON.parse(data!.replace("data: ", "")) };
+  });
+  assert.deepEqual(events.map((e) => e.type), ["message.start", "payload", "trace", "message.end", "conversation"]);
+  assert.equal(events[2]!.data.trace.source, "rule");
+  assert.equal(events[4]!.data.conversation.inputPolicy.minChars, 2);
+  assert.equal(events[4]!.data.conversation.inputPolicy.allowDigitsOnly, false);
+  assert.ok(!("options" in events[4]!.data.conversation.inputPolicy));
+
+  const j = await call(POST, { headers: as("emp-ana"), params: { id: conv.id }, body: { text: "x".repeat(4001) } });
+  assert.equal(j.status, 400); // teto HTTP fixo
+});

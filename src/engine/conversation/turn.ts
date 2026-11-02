@@ -1,7 +1,7 @@
 /**
  * Orquestra UM turno de conversa. Ordem de decisão:
- *   estado da conversa → ação pendente (confirmar/cancelar/editar) → run suspensa (HITL: retoma o agent com a resposta)
- *   → flow ativo (sem LLM) → agent (LLM).
+ *   estado da conversa → run suspensa (HITL: retoma o agent com a resposta) → ação pendente (confirmar/cancelar/editar)
+ *   → flow ativo (sem LLM) → validação determinística do texto livre (sem LLM) → agent (LLM).
  * Tudo que o agent faz passa por tools embrulhadas (trace); efeitos colaterais só após confirmação.
  * @wiki docs/brain/functions/Turn.md
  */
@@ -22,6 +22,7 @@ import { isTemporarilyUnavailable, markActionDone, markActionFailed, recordConfi
 import { transaction } from "@/lib/db";
 import { ANALYST_OPTION, applyAfterEffects } from "./effects";
 import { clearTyping } from "./presence";
+import { checkInput, normalizeInput, resolveInputPolicy } from "./inputGuard";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
 import {
@@ -133,13 +134,25 @@ export async function runTurn(p: TurnParams): Promise<TurnResult> {
     }
   }
 
+  // Único ponto por onde texto livre chega ao modelo: antes dele, a validação determinística (regex/contagem, sem LLM).
+  // Clique em opção nunca é validado (o conteúdo é o rótulo); respostas a flow, rascunho e run suspensa já saíram acima.
+  if (!p.input.optionId) {
+    const policy = resolveInputPolicy(config.inputPolicy);
+    const check = checkInput(content, policy);
+    if (!check.ok) {
+      const options = policy.options?.length ? [{ kind: PAYLOAD_OPTIONS, data: policy.options }] : [];
+      t.reply(check.message, options, { source: "rule", notes: [`entrada sem conteúdo útil (${check.reason}): respondida por regra, sem chamar o modelo`] });
+      return t.finish();
+    }
+  }
+
   await t.agentTurn(conv, p.user, runner, ctx);
   return t.finish();
 }
 
-/** Texto gravado como mensagem do usuário: o texto, ou o rótulo da opção clicada. */
+/** Texto gravado como mensagem do usuário: o texto (normalizado), ou o rótulo da opção clicada. */
 function resolveContent(conv: Conversation, input: TurnInput): string | undefined {
-  const text = input.text?.trim();
+  const text = input.text ? normalizeInput(input.text) : "";
   if (text) return text;
   if (!input.optionId) return undefined;
   const last = listMessages(conv.id).reverse().find((m) => m.role === "agent");

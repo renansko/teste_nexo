@@ -2,6 +2,7 @@
 import type { Conversation } from "@/services/conversations/conversationService";
 import { getAssistant } from "@/engine/registry";
 import { AppError } from "@/lib/errors";
+import { publicInputPolicy, type PublicInputPolicy } from "./inputGuard";
 
 export interface PublicConversation {
   id: string;
@@ -18,16 +19,20 @@ export interface PublicConversation {
   hasPendingAction: boolean;
   transferReason: string | null;
   transferSummary: string | null;
+  /** Política de validação do texto livre da persona, para o cliente aplicar a mesma regra antes de enviar. */
+  inputPolicy: PublicInputPolicy;
   createdAt: string;
   updatedAt: string;
 }
 
 export function publicConversation(c: Conversation): PublicConversation {
+  const assistant = getAssistant(c.assistantId);
   return {
     id: c.id, assistantId: c.assistantId, employeeId: c.employeeId, analystId: c.analystId, state: c.state, ticketId: c.ticketId,
-    userMessages: c.userMessageCount, limit: getAssistant(c.assistantId).limits.maxUserMessages,
+    userMessages: c.userMessageCount, limit: assistant.limits.maxUserMessages,
     activeFlowId: c.activeFlow?.flowId ?? null, suspendedTool: c.suspendedRun?.toolId ?? null, hasPendingAction: !!c.pendingAction,
-    transferReason: c.transferReason, transferSummary: c.transferSummary, createdAt: c.createdAt, updatedAt: c.updatedAt,
+    transferReason: c.transferReason, transferSummary: c.transferSummary, inputPolicy: publicInputPolicy(assistant.inputPolicy),
+    createdAt: c.createdAt, updatedAt: c.updatedAt,
   };
 }
 

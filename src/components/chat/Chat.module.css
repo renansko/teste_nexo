@@ -266,6 +266,13 @@
   color: var(--ink-3);
 }
 
+/* Dica da validação da mensagem (mesma regra do servidor): aparece ao sair do campo ou ao tentar enviar. */
+.hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
 .metaAction {
   border: 0;
   background: none;
