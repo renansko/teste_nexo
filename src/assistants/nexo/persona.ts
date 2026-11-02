@@ -11,6 +11,7 @@ import { transferToAnalyst } from "./tools/transfer";
 import { addTicketUpdate, openTicket, reopenTicket } from "./tools/ticketActions";
 import { openTicketFlow } from "./flows/openTicket";
 import { nexoActions } from "./actions";
+import { nexoHooks } from "./hooks";
 
 export const nexoAssistant: AssistantConfig = {
   id: "nexo",
@@ -28,4 +29,5 @@ export const nexoAssistant: AssistantConfig = {
     historyWindow: 20,
   },
   waitingText: "Um analista está cuidando desta conversa. Sua mensagem foi registrada e ele responderá por aqui.",
+  hooks: nexoHooks,
 };

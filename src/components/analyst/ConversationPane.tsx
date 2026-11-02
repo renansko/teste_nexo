@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
-  ArrowLeft, Bot, Check, ChevronDown, CircleCheck, Headset, Info, LoaderCircle, PanelRight, SendHorizontal, Undo2, UserRoundCheck, X,
+  ArrowLeft, Bot, Check, ChevronDown, CircleCheck, Headset, Info, LoaderCircle, PanelRight, SendHorizontal, Ticket, Undo2, UserRoundCheck, X,
 } from "lucide-react";
 import type { AnalystConversationDetail, ChatMessage, SessionUser } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
@@ -21,13 +21,15 @@ interface Props {
   busy?: PaneAction | "reply";
   ticketsOpen: boolean;
   onToggleTickets: () => void;
+  /** "Ver chamado": abre o painel e, se a conversa ainda não é deste analista, assume o atendimento. */
+  onViewTicket: () => void;
   onBack: () => void;
   onAction: (a: PaneAction) => void;
   onReply: (text: string) => Promise<boolean>;
 }
 
 /** Coluna da conversa: cabeçalho com estado/ações, histórico com o raciocínio do agent e barra de atendimento. */
-export function ConversationPane({ me, detail, loading, error, busy, ticketsOpen, onToggleTickets, onBack, onAction, onReply }: Props) {
+export function ConversationPane({ me, detail, loading, error, busy, ticketsOpen, onToggleTickets, onViewTicket, onBack, onAction, onReply }: Props) {
   if (!detail) {
     return (
       <section className={styles.pane} aria-label="Conversa">
@@ -51,6 +53,8 @@ export function ConversationPane({ me, detail, loading, error, busy, ticketsOpen
   const name = c.employee?.name ?? "Funcionário";
   const mine = c.state === "analyst" && c.analystId === me.id;
   const meta = [c.employee?.department, c.employee?.email, c.ticketId].filter(Boolean).join(" · ");
+  // Ver o chamado de uma conversa que espera atendente (ou ainda está com o agent) já é começar a atendê-la.
+  const viewTakes = c.state === "waiting_analyst" || c.state === "agent";
 
   return (
     <section className={styles.pane} aria-label={`Conversa com ${name}`}>
@@ -79,10 +83,24 @@ export function ConversationPane({ me, detail, loading, error, busy, ticketsOpen
         ) : (
           <ModePill state={c.state} analystName={c.analyst?.name} />
         )}
-        {!ticketsOpen && (
-          <button type="button" className={styles.iconBtn} onClick={onToggleTickets} aria-label={`Ver chamados de ${firstName(name)}`}>
-            <PanelRight size={18} aria-hidden />
+        {c.ticketId ? (
+          <button
+            type="button"
+            className={styles.btn}
+            disabled={!!busy}
+            onClick={onViewTicket}
+            title={viewTakes ? `Assume o atendimento e abre o chamado ${c.ticketId}` : `Abre o chamado ${c.ticketId}`}
+            aria-label={viewTakes ? `Ver chamado ${c.ticketId} e atender` : `Ver chamado ${c.ticketId}`}
+          >
+            <Ticket size={14} aria-hidden />
+            <span className={styles.headerActionLabel}>{viewTakes ? "Ver chamado e atender" : "Ver chamado"}</span>
           </button>
+        ) : (
+          !ticketsOpen && (
+            <button type="button" className={styles.iconBtn} onClick={onToggleTickets} aria-label={`Ver chamados de ${firstName(name)}`}>
+              <PanelRight size={18} aria-hidden />
+            </button>
+          )
         )}
       </header>
 

@@ -32,7 +32,9 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 - Polling: lista a cada 4 s, conversa aberta a cada 3 s (sem push). Ações (assumir, devolver, encerrar, responder) recarregam conversa e lista.
 - Etiqueta "Agent pediu ajuda" ⇔ `transferReason = low_confidence` ([DecisionTrace](../entities/DecisionTrace.md)).
 - Cards estruturados (rascunho, chamados, opções) aparecem como resumo em texto: o analista vê o que o funcionário recebeu, sem botões.
-- ≤ 1280 px o painel de chamados sobrepõe a conversa e começa fechado; ≤ 720 px lista e conversa viram telas alternadas.
+- Conversa com `ticketId` tem o botão **"Ver chamado"** no cabeçalho; em `waiting_analyst`/`agent` ele vira "Ver chamado e atender": chama `take` e abre o painel, então ao fechá-lo o analista já está respondendo. Sem `ticketId`, fica o ícone que só abre o painel.
+- Painel de chamados começa com **"Resumo do assistente"** (`assistantBrief` em `labels.ts`): motivo e resumo da transferência, última `report-decision` (entendeu/fez/por quê/segurança), passos concluídos e artigos indicados. Derivado do que já está nas mensagens; nenhuma chamada nova ao modelo.
+- ≤ 1280 px o painel de chamados sobrepõe a conversa e começa fechado; ≤ 1100 px o rodapé põe os botões em linha própria e o cabeçalho esconde a pílula de estado (o rodapé já o diz); ≤ 720 px lista e conversa viram telas alternadas e os botões ficam só com ícone.
 
 ## Pendências
 

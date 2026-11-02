@@ -7,6 +7,7 @@ import { AppError } from "@/lib/errors";
 import { discardSuspendedRun } from "@/engine/agent/mastra";
 import type { Employee } from "@/services/employees/employeeService";
 import { addMessage, getConversation, updateConversation, type Conversation, type Message } from "@/services/conversations/conversationService";
+import { runHook } from "./effects";
 
 function load(id: string): Conversation {
   const c = getConversation(id);
@@ -26,6 +27,7 @@ export function takeConversation(id: string, analyst: Employee, now = new Date()
   if (c.suspendedRun) discardSuspendedRun(c.suspendedRun.runId);
   const conversation = updateConversation(id, { state: "analyst", analystId: analyst.id, activeFlow: null, pendingAction: null, suspendedRun: null }, now);
   const m = c.state === "analyst" ? [] : [system(id, `${analyst.name} assumiu a conversa. O Nexo Assist está em pausa.`, now)];
+  if (c.state !== "analyst") runHook(c.assistantId, "onTaken", { id, employeeId: c.employeeId, ticketId: c.ticketId }, { analystId: analyst.id, now });
   return { conversation, messages: m };
 }
 

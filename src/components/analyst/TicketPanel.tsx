@@ -4,7 +4,8 @@ import { ChevronRight, X } from "lucide-react";
 import type { TicketView } from "@/lib/api";
 import { formatDateTime, formatDay } from "@/lib/format";
 import { statusDot } from "@/components/chat/payload/tones";
-import { firstName } from "./labels";
+import { ConfidenceBadge } from "@/components/trace/DecisionDetails";
+import { firstName, type AssistantBrief } from "./labels";
 import styles from "./Console.module.css";
 
 const OPEN = new Set(["aberto", "em_atendimento", "aguardando_analista", "aprovado"]);
@@ -16,18 +17,21 @@ function deadline(t: TicketView): React.ReactNode {
 }
 
 /**
- * Painel "Chamados do funcionário": o da conversa em destaque e os demais, expansíveis.
- * `tickets === null`: sistema de chamados indisponível; só o painel degrada, a conversa segue visível.
+ * Painel "Chamados do funcionário": resumo do que o assistente já apurou (para o atendente não perguntar tudo de novo),
+ * o chamado da conversa em destaque e os demais, expansíveis.
+ * `tickets === null`: sistema de chamados indisponível; só a lista degrada, resumo e conversa seguem visíveis.
  */
 export function TicketPanel({
   employeeName,
   tickets,
   currentId,
+  brief,
   onClose,
 }: {
   employeeName: string;
   tickets: TicketView[] | null;
   currentId: string | null;
+  brief?: AssistantBrief | null;
   onClose: () => void;
 }) {
   const [expanded, setExpanded] = useState<string>();
@@ -52,14 +56,49 @@ export function TicketPanel({
           <X size={18} aria-hidden />
         </button>
       </header>
-      {tickets === null ? (
-        <div className={styles.ticketsBody}>
+      <div className={styles.ticketsBody}>
+        {brief && (
+          <section>
+            <h2 className={styles.sectionLabel}>Resumo do assistente</h2>
+            <div className={styles.brief}>
+              {brief.summary && (
+                <p>
+                  {brief.reason && <strong>Transferida: {brief.reason}. </strong>}
+                  {brief.summary}
+                </p>
+              )}
+              {brief.decision && (
+                <>
+                  <p>
+                    <strong>Entendeu:</strong> {brief.decision.understanding}
+                  </p>
+                  <p>
+                    <strong>Fez:</strong> {brief.decision.action}
+                  </p>
+                  <p>
+                    <strong>Por quê:</strong> {brief.decision.reasoning}
+                  </p>
+                  <ConfidenceBadge confidence={brief.decision.confidence} />
+                </>
+              )}
+              {brief.steps.length > 0 && (
+                <p className={styles.ticketMeta}>
+                  <strong>Já feito:</strong> {brief.steps.join(" · ")}
+                </p>
+              )}
+              {brief.articles.length > 0 && (
+                <p className={styles.ticketMeta}>
+                  <strong>Artigos indicados:</strong> {brief.articles.join("; ")}
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+        {tickets === null && (
           <p className={styles.ticketMeta} role="status">
             Sistema de chamados temporariamente indisponível. Os chamados de {first} aparecem aqui assim que ele voltar.
           </p>
-        </div>
-      ) : (
-      <div className={styles.ticketsBody}>
+        )}
         {current && (
           <section>
             <h2 className={styles.sectionLabel}>Desta conversa</h2>
@@ -80,6 +119,7 @@ export function TicketPanel({
             </div>
           </section>
         )}
+        {tickets !== null && (
         <section>
           <h2 className={styles.sectionLabel}>{current ? "Outros chamados" : "Chamados"}</h2>
           {others.length === 0 ? (
@@ -121,8 +161,8 @@ export function TicketPanel({
             </ul>
           )}
         </section>
+        )}
       </div>
-      )}
     </aside>
   );
 }

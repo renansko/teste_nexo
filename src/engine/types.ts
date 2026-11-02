@@ -226,4 +226,20 @@ export interface AssistantConfig {
   contextFor?: (ctx: { userId: string; now: Date }) => string | undefined;
   /** Texto quando a conversa está com analista. */
   waitingText?: string;
+  /** Ganchos para transições da conversa que o engine dispara (ex.: sincronizar o chamado vinculado). */
+  hooks?: AssistantHooks;
+}
+
+/** O que um gancho recebe: o suficiente para achar o chamado vinculado sem acoplar o engine ao domínio da persona. */
+export interface ConversationRef { id: string; employeeId: string; ticketId: string | null }
+
+/**
+ * Ganchos síncronos e best-effort: o engine os chama DEPOIS de gravar a transição e engole exceções (log),
+ * então um sistema externo fora do ar nunca impede transferir ou assumir uma conversa.
+ */
+export interface AssistantHooks {
+  /** Conversa passou a `waiting_analyst` (tool, chamado crítico ou confiança baixa). */
+  onTransferred?: (conv: ConversationRef, info: { reason: string; now: Date }) => void;
+  /** Analista assumiu a conversa (`take`). */
+  onTaken?: (conv: ConversationRef, info: { analystId: string; now: Date }) => void;
 }

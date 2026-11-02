@@ -7,6 +7,7 @@ Seam entre o engine genérico e uma persona. Tipos em `src/engine/types.ts`; reg
 - `instructions` estáveis (entram no cache automático de prompt do provedor) e `contextFor` volátil por requisição.
 - `tools`: `ToolSpec` = tool Mastra + `label` humano + opcionais `summarize`, `toPayload`, `toModel`, `afterEffects`, `requiresConfirmation`.
 - `flows` ([FlowEngine](FlowEngine.md)), `actions` (executores de [PendingAction](PendingAction.md)), `limits` (`maxUserMessages`, `maxSteps`, `historyWindow`), `model`/`fastModel`.
+- `hooks` (opcional): `onTransferred(conv, {reason, now})` e `onTaken(conv, {analystId, now})`, com `conv = { id, employeeId, ticketId }`. O engine os chama por `runHook` (`effects.ts`) **depois** de gravar a transição e engole exceções com log: são best-effort e nunca bloqueiam transferir/assumir. É o seam para a persona reagir a eventos da conversa sem o engine conhecer o domínio dela (ex.: status do chamado, [Ticket](../entities/Ticket.md)).
 
 ## O que o engine garante
 

@@ -21,7 +21,7 @@ Conversa entre funcionário, assistente (persona) e analista. Código: `src/serv
 - `closed` rejeita mensagens (`CONVERSATION_CLOSED`, 409). `userMessageCount >= limits.maxUserMessages` rejeita (`MESSAGE_LIMIT`, 409); o limite é da persona (30 na Nexo).
 - `user_message_count` é incrementado em `addMessage` para `role = user` (contagem única, inclusive mensagens na fila do analista).
 - Uma conversa tem no máximo um entre `activeFlow`, `pendingAction` e `suspendedRun` ([HumanInTheLoop](../services/HumanInTheLoop.md)); `take` e `close` limpam os três (e descartam a run suspensa).
-- `ticketId` aponta para o último chamado criado/alterado nesta conversa (`AfterEffect` link-ticket).
+- `ticketId` aponta para o último chamado criado/alterado nesta conversa (`AfterEffect` link-ticket). Transferir e assumir disparam os ganchos `onTransferred`/`onTaken` da persona depois de gravar a transição ([AssistantConfig](../services/AssistantConfig.md)); a Nexo os usa para mover o status do chamado ([Ticket](Ticket.md)). Falha no gancho nunca desfaz a transição.
 - `transferSummary` sobrevive à devolução ao agent e entra no contexto do modelo ("já passou por um analista").
 - `transferReason` guarda o **código** (`user_request`, `critical`, `overdue`, `low_confidence`); a mensagem de sistema usa o rótulo humano (`AfterEffect.label`), nunca o código.
 - Toda conversa tem `assistant_id` (hoje sempre `nexo`), seam para multi-persona.

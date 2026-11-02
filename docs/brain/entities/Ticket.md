@@ -10,6 +10,7 @@ Chamado do service desk (Anexo A). Código: `src/services/tickets/types.ts`, `ti
 - `resolvedAt` marca a resolução; reabertura só até 7 dias depois (`REOPEN_NOT_ALLOWED` senão) e volta a `aberto`.
 - Atualizações (`ticket_updates`) têm autor e papel (`employee | analyst | agent | system`).
 - Privacidade: `getTicketForRequester` devolve `undefined` para chamado de outro funcionário; a API responde 404, nunca 403 (não revela existência).
+- **Sincronia com a conversa** (ganchos da persona, `src/assistants/nexo/hooks.ts`, via `AssistantConfig.hooks`): conversa transferida → chamado vinculado `aberto|em_atendimento` passa a `aguardando_analista`; analista assume → `aberto|aguardando_analista` passa a `em_atendimento`. Devolver/encerrar não mexem no chamado (o analista decide o desfecho no sistema de chamados). Best-effort: com o legado fora, a conversa muda e o chamado fica como estava (teste em `flows/openTicket.test.ts`). `dueAt` não é renovado por mudança de status.
 
 `TicketView` (o que sai para cliente e modelo) acrescenta `overdue`, `priorityLabel`, `statusLabel`, `slaLabel`.
 

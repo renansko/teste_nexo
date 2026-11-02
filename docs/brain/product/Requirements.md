@@ -23,7 +23,7 @@ Todos os itens obrigatórios ("O que construir" 1–7, requisitos técnicos, Ane
 
 ## Pendências
 
-- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista. O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: painel expansível nos passos ([DecisionTrace](../entities/DecisionTrace.md)). Fidelidade visual conferida à mão; em larguras intermediárias (720–1000 px) o rodapé do console já quebra os botões em linha própria.
-- "Transferir chamados" no serviço simulado (item 4 do PRD): `updateTicketStatus` existe em `ticketService.ts` mas nada o chama; transferir a conversa não muda o chamado vinculado para "Aguardando analista" (status só via seed). Em avaliação se vale ligar os dois.
-- Deploy (diferencial) não feito; em avaliação. Dockerfile e compose prontos ([README](../../../README.md)).
+- Anexo C (protótipo Pencil `nexo.pen`): todas as telas implementadas, inclusive o console do analista. O detalhe da decisão (item 7 do PRD) não está desenhado no protótipo; formato escolhido: painel expansível nos passos ([DecisionTrace](../entities/DecisionTrace.md)). Larguras menores conferidas com screenshots (800 e 420 px) em 2026-11-01 ([FrontendUI](../conventions/FrontendUI.md)).
+- "Transferir chamados" (item 4 do PRD): resolvido pelos ganchos da persona — transferir a conversa põe o chamado vinculado em `aguardando_analista` e assumir o leva a `em_atendimento` ([Ticket](../entities/Ticket.md)).
+- Deploy (diferencial): roteiro no [README](../../../README.md) (Koyeb ou Hugging Face Spaces, planos gratuitos); a publicação depende da conta do autor. Limitação do plano gratuito: disco efêmero, o banco é recriado a cada reinício.
 - Escopo: a guarda é lexical e conservadora; classificador com confiança fica como próximo passo ([NexoAssistant](../services/NexoAssistant.md)).

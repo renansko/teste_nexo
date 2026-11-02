@@ -11,7 +11,7 @@ Console do analista (role `analyst`). Código: `src/app/api/analyst/**`, transi�
 
 ## Regras
 
-- `take`: de `agent` ou `waiting_analyst`; descarta flow e rascunho; se já é do mesmo analista, idempotente; de outro analista → 409 `ALREADY_TAKEN`; encerrada → 409 `CONVERSATION_CLOSED`.
+- `take`: de `agent` ou `waiting_analyst`; descarta flow e rascunho; se já é do mesmo analista, idempotente; de outro analista → 409 `ALREADY_TAKEN`; encerrada → 409 `CONVERSATION_CLOSED`. Dispara `onTaken` (chamado vinculado → `em_atendimento`, best-effort; [Ticket](../entities/Ticket.md)).
 - `messages`: só quem assumiu (409 `NOT_ASSIGNED`). `return`: em `analyst`, só quem assumiu; em `waiting_analyst`, qualquer analista (devolver sem assumir, como no protótipo); outros estados → 409 `NOT_ASSIGNED`.
 - `return`: limpa `analystId` e `transferReason`, mantém `transferSummary` (contexto para o agent).
 - `close`: idempotente; funcionário recebe 409 ao tentar enviar depois.

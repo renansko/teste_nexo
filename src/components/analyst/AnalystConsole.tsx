@@ -13,7 +13,7 @@ import { initialsOf, useSession } from "@/components/session/SessionProvider";
 import { ConversationList } from "./ConversationList";
 import { ConversationPane, type PaneAction } from "./ConversationPane";
 import { TicketPanel } from "./TicketPanel";
-import type { Filter } from "./labels";
+import { assistantBrief, type Filter } from "./labels";
 import styles from "./Console.module.css";
 
 const POLL_LIST_MS = 4000;
@@ -108,6 +108,14 @@ export function AnalystConsole() {
     }
   }
 
+  /** "Ver chamado": abrir o painel já é começar a atender; ao fechá-lo o analista volta para a conversa pronto para responder. */
+  async function viewTicket() {
+    if (!detail || busy) return;
+    const s = detail.conversation.state;
+    if (s === "waiting_analyst" || s === "agent") await act("take");
+    setTicketsOpen(true);
+  }
+
   async function reply(text: string): Promise<boolean> {
     if (!selectedId) return false;
     setBusy("reply");
@@ -168,6 +176,7 @@ export function AnalystConsole() {
         busy={busy}
         ticketsOpen={ticketsOpen}
         onToggleTickets={() => setTicketsOpen(true)}
+        onViewTicket={() => void viewTicket()}
         onBack={() => setSelectedId(undefined)}
         onAction={(a) => void act(a)}
         onReply={reply}
@@ -178,6 +187,7 @@ export function AnalystConsole() {
           employeeName={employeeName}
           tickets={detail.tickets}
           currentId={detail.conversation.ticketId}
+          brief={assistantBrief(detail)}
           onClose={() => setTicketsOpen(false)}
         />
       )}

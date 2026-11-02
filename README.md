@@ -53,6 +53,8 @@ Na interface, os rótulos aparecem acima de cada resposta (como no protótipo) e
 
 `/atendente` (logins `fabio.nunes@nexo.com` e `gabriela.castro@nexo.com`): lista com busca e filtros (Todas, Para você, Com o agent, Minhas), etiqueta de status por conversa ("Transferida · INC-20311", "Agent pediu ajuda", "Agent atendendo"), histórico com o raciocínio do agent, resumo da transferência, assumir (agent pausado), responder, devolver ao agent, encerrar e painel com os chamados do funcionário. Atualiza por polling.
 
+Quando a conversa tem um chamado, o cabeçalho traz **"Ver chamado"**: numa conversa que espera atendente ele assume o atendimento e abre o painel, então ao fechá-lo o analista já está respondendo. O painel começa com o **resumo do assistente** (motivo e resumo da transferência, o que o agent entendeu e fez, passos concluídos, artigos indicados), montado a partir do que já está nas mensagens, sem nova chamada ao modelo. O sistema de chamados acompanha a conversa: transferir põe o chamado vinculado em "Aguardando analista" e assumir o leva a "Em atendimento" (ganchos da persona em `src/assistants/nexo/hooks.ts`; se o legado estiver fora, a conversa muda e o chamado fica como estava).
+
 ## Como a qualidade das decisões é garantida
 
 - Regras do service desk em código testado (`src/services/tickets/*.test.ts`), não em prompt.
@@ -84,6 +86,19 @@ C=$(curl -s -X POST localhost:3000/api/conversations -H "authorization: Bearer $
 curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $T" -H 'accept: text/event-stream' \
   -H 'content-type: application/json' -d '{"text":"minha vpn dá erro 809"}'
 ```
+
+## Deploy
+
+A imagem Docker do repositório sobe em qualquer PaaS que construa a partir de um `Dockerfile`. Duas opções com plano gratuito e sem cartão no cadastro (confirme as condições atuais ao criar a conta):
+
+**Koyeb (recomendado: deploy direto do GitHub).** Create Web Service → GitHub → este repositório → builder *Dockerfile* → instância *Free* → porta `3000`, health check HTTP em `/entrar`. Variáveis de ambiente (marque as duas primeiras como *secret*): `OPENAI_API_KEY`, `NEXO_AUTH_SECRET` (16+ caracteres aleatórios), `NODE_ENV=production`, `NEXO_DB_PATH=/app/data/nexo.db`. Cada push em `main` redeploya.
+
+**Hugging Face Spaces (alternativa).** New Space → SDK *Docker* → envie o repositório para o Space (`git remote add hf …`) com um `README.md` que comece pelo cabeçalho `sdk: docker` e `app_port: 3000`; as variáveis acima vão em *Settings → Variables and secrets*. O Space gratuito dorme após 48 h sem acesso e acorda no primeiro pedido.
+
+O que esperar e como proteger:
+
+- **Disco efêmero.** No plano gratuito o SQLite não sobrevive a redeploy nem a reinício da instância: o banco é recriado e semeado no primeiro acesso, conversas da demonstração se perdem. Localmente e no Docker Compose a persistência é completa (volume). Próximo passo para persistir na nuvem grátis: trocar `node:sqlite` por libsql remoto (Turso, plano gratuito), já que o Mastra usa `@mastra/libsql`.
+- **Chaves e custo.** Chaves só em variáveis de ambiente (nada no repositório; `assertRuntimeEnv` recusa subir sem elas). Defina um limite de gasto na conta do provedor do modelo; o projeto já limita a 30 mensagens por conversa, janela de 20 mensagens, `maxSteps` por turno e usa cache de prompt. Não há rate limit por IP: se o link ficar público por muito tempo, coloque um proxy com limite na frente ou restrinja os e-mails do seed.
 
 ## Trade-offs e próximos passos
 

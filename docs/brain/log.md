@@ -27,3 +27,5 @@
 - 2026-11-01 | front | Passos `quiet` no trace: busca na central some da linha de status do chat (segue no "Por quê?" e no console).
 - 2026-11-01 | front | Console: rodapé de atendimento quebra os botões em linha própria em larguras intermediárias (antes espremia o texto).
 - 2026-11-01 | escopo | Guarda determinística de escopo TI em `open-ticket` (`scope.ts`, OUT_OF_SCOPE); validação do PRD registrada em Requirements com pendências atualizadas.
+- 2026-11-01 | chamados | Ganchos da persona (`AssistantConfig.hooks`): transferir conversa → chamado vinculado `aguardando_analista`; assumir → `em_atendimento`; best-effort com o legado fora.
+- 2026-11-01 | front | Console: botão "Ver chamado (e atender)" assume e abre o painel; painel começa com "Resumo do assistente"; cabeçalho e rodapé ajustados ≤ 1100 px. README: roteiro de deploy gratuito.

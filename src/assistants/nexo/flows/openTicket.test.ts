@@ -161,6 +161,28 @@ test("editar prioridade reabre o passo pelo flow determinístico; caso crítico 
   assert.equal(c.conversation.state, "waiting_analyst");
   assert.equal(c.conversation.transferReason, "critical");
   assert.match(c.conversation.transferSummary ?? "", /INC-20400/);
+  // Transferir a conversa transfere o chamado vinculado no sistema simulado; assumir o traz para atendimento.
+  assert.equal(getTicket("INC-20400")!.status, "aguardando_analista");
+  takeConversation(conv.id, getEmployee("an-fabio")!);
+  assert.equal(getTicket("INC-20400")!.status, "em_atendimento");
+});
+
+test("transferência com o legado fora não falha: a conversa muda de estado e o chamado fica como estava", async () => {
+  const conv = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  await start(conv.id, { title: "Teclado do notebook parou de funcionar", description: "Nenhuma tecla responde desde cedo.", type: "INC", category: "Hardware" });
+  await send(conv.id, { optionId: "eu" });
+  await send(conv.id, { optionId: "parado" });
+  await send(conv.id, { optionId: "confirm" });
+  assert.equal(getConversation(conv.id)!.ticketId, "INC-20400");
+  legacyGateway.configure({ rate: 1, durationMs: 60_000, now: () => 0 });
+  const runner = scriptedRunner(async (_p, tool) => {
+    await tool("transfer-to-analyst", { reason: "user_request", summary: "Ana quer falar com um analista sobre o INC-20400." });
+    return "Vou chamar um analista.";
+  });
+  const r = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "quero um analista" }, runner });
+  assert.equal(r.conversation.state, "waiting_analyst");
+  legacyGateway.configure({ rate: 0 });
+  assert.equal(getTicket("INC-20400")!.status, "aberto"); // gancho best-effort: não aplicou, não quebrou
 });
 
 test("sistema legado fora ao confirmar: pedido vai para a fila, é registrado quando volta e reprocessar não duplica", async () => {

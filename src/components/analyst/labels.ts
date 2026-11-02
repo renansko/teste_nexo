@@ -1,5 +1,5 @@
 /** Rótulos e cores do console do analista (protótipo "Atendente — Conversas"). */
-import type { AnalystConversation, PayloadPart, SessionUser } from "@/lib/api";
+import type { AnalystConversation, AnalystConversationDetail, Confidence, PayloadPart, SessionUser } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 
 export type Filter = "all" | "forYou" | "agent" | "mine";
@@ -108,6 +108,39 @@ export function lastPreview(c: AnalystConversation, me: SessionUser): string {
   if (m.role === "agent") return `Nexo: ${text}`;
   if (m.role === "analyst") return `${c.analystId === me.id ? "Você" : firstName(c.analyst?.name) || "Analista"}: ${text}`;
   return text;
+}
+
+/** O que o assistente já produziu nesta conversa, condensado para o atendente (sem nova chamada ao modelo). */
+export interface AssistantBrief {
+  /** Motivo da transferência em texto e o resumo que o agent escreveu para o analista. */
+  reason: string | null;
+  summary: string | null;
+  /** Última decisão declarada pelo agent (report-decision). */
+  decision: { understanding: string; action: string; reasoning: string; confidence: Confidence } | null;
+  /** Passos concluídos ao longo da conversa, sem repetição. */
+  steps: string[];
+  /** Artigos da central mostrados ao funcionário. */
+  articles: string[];
+}
+
+export function assistantBrief(d: AnalystConversationDetail): AssistantBrief | null {
+  const c = d.conversation;
+  const agent = d.messages.filter((m) => m.role === "agent");
+  const decision = [...agent].reverse().find((m) => m.trace?.decision)?.trace?.decision ?? null;
+  const steps = new Set<string>();
+  const articles = new Set<string>();
+  for (const m of agent) {
+    for (const a of m.trace?.actions ?? []) if (a.status === "done") steps.add(a.label);
+    for (const p of m.payload ?? []) if (p.kind === "articles") p.data.forEach((a) => articles.add(a.title));
+  }
+  if (!c.transferSummary && !decision && steps.size === 0) return null;
+  return {
+    reason: c.transferReason ? reasonLabel(c.transferReason) : null,
+    summary: c.transferSummary,
+    decision,
+    steps: [...steps],
+    articles: [...articles],
+  };
 }
 
 /** Resumo em texto dos cards estruturados (o analista vê o que o funcionário recebeu, sem botões). */
