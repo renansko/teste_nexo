@@ -5,6 +5,7 @@ import { getConversation, listMessages } from "@/services/conversations/conversa
 import { withRetry } from "@/services/tickets/legacyGateway";
 import { employeeTickets, toAnalystItem } from "@/engine/conversation/analystView";
 import type { TicketView } from "@/services/tickets/ticketService";
+import { typingState } from "@/engine/conversation/presence";
 
 export const runtime = "nodejs";
 
@@ -26,5 +27,5 @@ export const GET = route(async (req, { params }: IdParams) => {
     if (!(e instanceof AppError) || e.code !== "TICKET_SERVICE_UNAVAILABLE") throw e;
     tickets = null;
   }
-  return Response.json({ conversation: item, messages: listMessages(id), employee: item.employee, tickets });
+  return Response.json({ conversation: item, messages: listMessages(id), employee: item.employee, tickets, typing: { employee: typingState(id).employee } });
 });

@@ -18,7 +18,7 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 - `src/lib/api.ts` é o único arquivo que conhece URLs e formatos HTTP. Mudou o contrato (`ChatApi`, página canônica a criar pelo back) → ajustar só ali.
 - Tokens visuais (cores, fontes Schibsted Grotesk e Newsreader) vêm das variáveis do `.pen` e vivem em `src/app/globals.css`. Não usar cor solta nos componentes.
 - Turno do agent chega por SSE: eventos `action` viram os passos acima do balão ("consultou seus chamados"), menos os `quiet` (busca na central), que só aparecem no "Por quê?" e no console; `text.delta` é o texto parcial. Passo `pending` só gira no turno em andamento; em mensagem gravada ele é uma tool que parou para perguntar ([HumanInTheLoop](../services/HumanInTheLoop.md)) e recebe ícone estático de pergunta. Um turno pode trazer várias mensagens (cada uma com `message.start`/`message.end`); erros de domínio vêm como evento `error` dentro do stream. No fim o front recarrega a conversa para ter ids, trace e estado finais.
-- Respostas do analista chegam por polling em `messages?after=` (3 s com analista, 6 s com o agent), que também atualiza o estado.
+- Respostas do analista chegam por polling em `messages?after=` (2 s com analista, 6 s com o agent), que também atualiza o estado e traz `typing.analyst`: com ele, a lista mostra um balão "Analista" com três pontos (`role=status`). O composer avisa o próprio "digitando" (`POST typing`) a cada 1,5 s enquanto há texto, só com analista envolvido; o agent não recebe aviso.
 - Opções e cards só aceitam clique na última mensagem do agent com estado `agent` e sem turno em andamento. Clique em opção envia `{optionId, text: label}`; clique num chamado do seletor envia texto `"<id> · <título>"`.
 - Rascunho (`draft`): as opções da mesma mensagem viram a barra de ações do card. Ids `confirm` / `edit:<campo>` / `cancel` definem o estilo do botão.
 - Contador `userMessages/limit` vem do backend; atingido o limite, o composer bloqueia e oferece nova conversa.
@@ -30,6 +30,7 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 
 - Filtros calculados no cliente sobre a lista inteira: "Para você" = `waiting_analyst`; "Com o agent" = `agent`; "Minhas" = `analyst` com `analystId` = eu. A busca vai ao servidor (`q`, debounce 250 ms).
 - Polling: lista a cada 4 s, conversa aberta a cada 3 s (sem push). Ações (assumir, devolver, encerrar, responder) recarregam conversa e lista.
+- "Digitando": o detalhe traz `employeeTyping`; o histórico mostra um balão do funcionário com três pontos no fim. O composer de quem assumiu avisa `POST typing` a cada 1,5 s enquanto há texto (`ConversationPane`, sem passar pelo `AnalystConsole`). Latência visível ≈ polling + TTL de 4 s.
 - Etiqueta "Agent pediu ajuda" ⇔ `transferReason = low_confidence` ([DecisionTrace](../entities/DecisionTrace.md)).
 - Cards estruturados (rascunho, chamados, opções) aparecem como resumo em texto: o analista vê o que o funcionário recebeu, sem botões.
 - Conversa com `ticketId` tem o botão **"Ver chamado"** no cabeçalho; em `waiting_analyst`/`agent` ele vira "Ver chamado e atender": chama `take` e abre o painel, então ao fechá-lo o analista já está respondendo. Sem `ticketId`, fica o ícone que só abre o painel.

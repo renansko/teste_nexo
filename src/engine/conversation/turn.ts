@@ -21,6 +21,7 @@ import { interpretPendingInput, pendingParts, withActionId } from "../actions/pe
 import { isTemporarilyUnavailable, markActionDone, markActionFailed, recordConfirmedAction, rescheduleAction } from "../actions/queue";
 import { transaction } from "@/lib/db";
 import { ANALYST_OPTION, applyAfterEffects } from "./effects";
+import { clearTyping } from "./presence";
 import { encodeSse, type ChatEvent, type Emit } from "./events";
 import { publicConversation } from "./view";
 import {
@@ -75,6 +76,7 @@ export async function runTurn(p: TurnParams): Promise<TurnResult> {
   const content = resolveContent(conv, p.input);
   if (!content) throw new AppError("INVALID_BODY", "Envie um texto ou uma opção", 400);
   addMessage(conv.id, { role: "user", content }, now);
+  clearTyping(conv.id, "employee");
   emit({ type: "message.start" });
 
   const produced: Message[] = [];

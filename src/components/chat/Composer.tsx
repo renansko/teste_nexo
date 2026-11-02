@@ -8,6 +8,8 @@ export function Composer(props: {
   placeholder?: string;
   meta?: React.ReactNode;
   onSend: (text: string) => void;
+  /** Chamado a cada tecla com texto no campo (quem usa decide o ritmo do aviso "digitando"). */
+  onTyping?: () => void;
 }) {
   const [text, setText] = useState("");
 
@@ -25,7 +27,10 @@ export function Composer(props: {
         <input
           aria-label="Mensagem"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim()) props.onTyping?.();
+          }}
           placeholder={props.placeholder ?? "Escreva para o Nexo…"}
           disabled={props.disabled}
           autoFocus

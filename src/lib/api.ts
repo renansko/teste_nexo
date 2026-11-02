@@ -169,13 +169,15 @@ export const api = {
     const d = await request<{ conversation: Conversation; messages: RawMessage[] }>(`/api/conversations/${encodeURIComponent(id)}`);
     return { conversation: d.conversation, messages: d.messages.map(toMessage) };
   },
-  /** Polling incremental: estado atual + mensagens com id > afterId. */
+  /** Polling incremental: estado atual, mensagens com id > afterId e se o analista está digitando. */
   async messagesAfter(id: string, afterId: string) {
-    const d = await request<{ conversation: Conversation; messages: RawMessage[] }>(
+    const d = await request<{ conversation: Conversation; messages: RawMessage[]; typing?: { analyst: boolean } }>(
       `/api/conversations/${encodeURIComponent(id)}/messages?after=${encodeURIComponent(afterId)}`,
     );
-    return { conversation: d.conversation, messages: d.messages.map(toMessage) };
+    return { conversation: d.conversation, messages: d.messages.map(toMessage), analystTyping: d.typing?.analyst ?? false };
   },
+  /** Avisa que o funcionário está digitando (reenviar a cada ~1,5 s enquanto digita). */
+  typing: (id: string) => request<{ ok: true }>(`/api/conversations/${encodeURIComponent(id)}/typing`, { method: "POST", body: "{}" }),
 };
 
 // ---------- Console do analista (docs/brain/functions/AnalystConsoleApi.md) ----------
@@ -192,6 +194,8 @@ export interface AnalystConversationDetail {
   messages: ChatMessage[];
   /** `null`: sistema de chamados indisponível no momento (a conversa carrega mesmo assim; o polling tenta de novo). */
   tickets: TicketView[] | null;
+  /** Funcionário está digitando agora (presença efêmera, vem com o polling). */
+  employeeTyping: boolean;
 }
 
 type AnalystMutation = { conversation: AnalystConversation; messages: RawMessage[] };
@@ -204,9 +208,11 @@ const mutate = async (id: string, action: string, body = "{}") => {
 export const analystApi = {
   list: (q?: string) => request<AnalystConversation[]>(`/api/analyst/conversations${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   async get(id: string): Promise<AnalystConversationDetail> {
-    const d = await request<{ conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] | null }>(analystPath(id));
-    return { conversation: d.conversation, messages: d.messages.map(toMessage), tickets: d.tickets };
+    const d = await request<{ conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] | null; typing?: { employee: boolean } }>(analystPath(id));
+    return { conversation: d.conversation, messages: d.messages.map(toMessage), tickets: d.tickets, employeeTyping: d.typing?.employee ?? false };
   },
+  /** Avisa que o analista está digitando (só quem assumiu; reenviar a cada ~1,5 s). */
+  typing: (id: string) => request<{ ok: true }>(analystPath(id, "/typing"), { method: "POST", body: "{}" }),
   take: (id: string) => mutate(id, "/take"),
   reply: (id: string, text: string) => mutate(id, "/messages", JSON.stringify({ text })),
   giveBack: (id: string) => mutate(id, "/return"),

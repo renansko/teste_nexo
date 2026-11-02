@@ -8,6 +8,7 @@ import { discardSuspendedRun } from "@/engine/agent/mastra";
 import type { Employee } from "@/services/employees/employeeService";
 import { addMessage, getConversation, updateConversation, type Conversation, type Message } from "@/services/conversations/conversationService";
 import { runHook } from "./effects";
+import { clearTyping } from "./presence";
 
 function load(id: string): Conversation {
   const c = getConversation(id);
@@ -36,6 +37,7 @@ export function analystReply(id: string, analyst: Employee, text: string, now = 
   if (c.state !== "analyst" || c.analystId !== analyst.id) throw new AppError("NOT_ASSIGNED", "Assuma a conversa antes de responder", 409);
   if (!text.trim()) throw new AppError("MESSAGE_REQUIRED", "Mensagem vazia", 400);
   const message = addMessage(id, { role: "analyst", content: text.trim() }, now);
+  clearTyping(id, "analyst");
   return { conversation: getConversation(id)!, message };
 }
 

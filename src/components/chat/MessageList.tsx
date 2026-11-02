@@ -14,6 +14,8 @@ interface Props {
   messages: ChatMessage[];
   /** Turno do agent em andamento (SSE): ações e texto parciais. */
   streaming?: { actions: TraceAction[]; text: string } | null;
+  /** Analista humano digitando agora (presença via polling). */
+  analystTyping?: boolean;
   /** A última mensagem do agent aceita clique em opções/chamados. */
   interactive: boolean;
   onOption: (option: Option) => void;
@@ -21,12 +23,12 @@ interface Props {
 }
 
 /** Lista de mensagens do chat do funcionário. */
-export function MessageList({ messages, streaming, interactive, onOption, onPickTicket }: Props) {
+export function MessageList({ messages, streaming, analystTyping = false, interactive, onOption, onPickTicket }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const streamLen = (streaming?.text.length ?? 0) + (streaming?.actions.length ?? 0);
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, streamLen]);
+  }, [messages.length, streamLen, analystTyping]);
 
   const lastAgentId = [...messages].reverse().find((m) => m.role === "agent")?.id;
   const lastId = messages.at(-1)?.id;
@@ -69,6 +71,17 @@ export function MessageList({ messages, streaming, interactive, onOption, onPick
             </AgentMessage>
           );
         })}
+        {analystTyping && !streaming && (
+          <AgentMessage who={AUTHOR.analyst} analyst>
+            <div className={styles.agentBubble}>
+              <span className={styles.typing} role="status" aria-label="Analista está digitando">
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+          </AgentMessage>
+        )}
         {streaming && (
           <AgentMessage who="Nexo Assist" actions={streaming.actions} live>
             <div className={styles.agentBubble}>

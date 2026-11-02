@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft, Bot, Check, ChevronDown, CircleCheck, Headset, Info, LoaderCircle, PanelRight, SendHorizontal, Ticket, Undo2, UserRoundCheck, X,
 } from "lucide-react";
-import type { AnalystConversationDetail, ChatMessage, SessionUser } from "@/lib/api";
+import { analystApi, type AnalystConversationDetail, type ChatMessage, type SessionUser } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
 import { initialsOf } from "@/components/session/SessionProvider";
 import { DecisionDetails, hasDetails } from "@/components/trace/DecisionDetails";
@@ -12,6 +12,9 @@ import { avatarColors, dayLabel, firstName, hhmm, payloadSummary, reasonLabel } 
 import styles from "./Console.module.css";
 
 export type PaneAction = "take" | "giveBack" | "close";
+
+/** Ritmo do aviso "estou digitando" (menor que o TTL do servidor, 4 s). */
+const TYPING_NOTIFY_MS = 1500;
 
 interface Props {
   me: SessionUser;
@@ -156,9 +159,10 @@ function ModePill({ state, analystName }: { state: AnalystConversationDetail["co
 function History({ detail, me }: { detail: AnalystConversationDetail; me: SessionUser }) {
   const endRef = useRef<HTMLDivElement>(null);
   const count = detail.messages.length;
+  const typing = detail.employeeTyping && detail.conversation.state !== "closed";
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [count, detail.conversation.id]);
+  }, [count, detail.conversation.id, typing]);
 
   const c = detail.conversation;
   const analystName = c.state === "analyst" ? (c.analystId === me.id ? "Você" : c.analyst?.name) : undefined;
@@ -186,6 +190,17 @@ function History({ detail, me }: { detail: AnalystConversationDetail; me: Sessio
       <div className={styles.messages} aria-live="polite">
         {rows.length === 0 && <span className={styles.day}>Sem mensagens</span>}
         {rows}
+        {typing && (
+          <div className={styles.client}>
+            <div className={styles.bubble}>
+              <span className={styles.typingDots} role="status" aria-label={`${firstName(c.employee?.name) || "Funcionário"} está digitando`}>
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
     </div>
@@ -278,8 +293,18 @@ function Dock({
   onReply: (text: string) => Promise<boolean>;
 }) {
   const [text, setText] = useState("");
+  const typingSentRef = useRef(0);
   const c = detail.conversation;
   const first = firstName(c.employee?.name) || "O funcionário";
+
+  /** Avisa "digitando" no máximo a cada TYPING_NOTIFY_MS; o funcionário vê no polling dele. */
+  function notifyTyping(value: string) {
+    if (!value.trim()) return;
+    const t = Date.now();
+    if (t - typingSentRef.current < TYPING_NOTIFY_MS) return;
+    typingSentRef.current = t;
+    void analystApi.typing(c.id).catch(() => undefined);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -302,7 +327,10 @@ function Dock({
           <input
             aria-label={`Responder a ${first}`}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              notifyTyping(e.target.value);
+            }}
             placeholder={`Responder a ${first}…`}
             maxLength={4000}
             autoFocus

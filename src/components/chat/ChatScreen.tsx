@@ -33,9 +33,11 @@ const ERRORS: Record<string, string> = {
 
 const EMPTY_TURN: { actions: TraceAction[]; text: string } = { actions: [], text: "" };
 
-/** Polling de respostas do analista: mais frequente quando há analista envolvido. */
-const POLL_ANALYST_MS = 3000;
+/** Polling de respostas do analista: mais frequente quando há analista envolvido (também traz o "digitando…"). */
+const POLL_ANALYST_MS = 2000;
 const POLL_AGENT_MS = 6000;
+/** Ritmo do aviso "estou digitando" (menor que o TTL do servidor, 4 s). */
+const TYPING_NOTIFY_MS = 1500;
 
 /**
  * Chat do funcionário (protótipo: "Chat — Novo chamado" e "Chat — Consulta e transferência").
@@ -48,6 +50,8 @@ export function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string>();
   const [loaded, setLoaded] = useState(false);
+  const [analystTyping, setAnalystTyping] = useState(false);
+  const typingSentRef = useRef(0);
   const lastIdRef = useRef<string | undefined>(undefined);
   lastIdRef.current = messages.filter((m) => !m.id.startsWith("tmp-")).at(-1)?.id;
 
@@ -77,6 +81,7 @@ export function ChatScreen() {
       try {
         const fresh = await api.messagesAfter(convId, lastIdRef.current ?? "0");
         setConversation(fresh.conversation);
+        setAnalystTyping(fresh.conversation.state === "analyst" && fresh.analystTyping);
         if (fresh.messages.length) {
           setMessages((prev) => {
             const known = new Set(prev.map((m) => m.id));
@@ -159,6 +164,16 @@ export function ChatScreen() {
     setConversation(undefined);
     setMessages([]);
     setError(undefined);
+    setAnalystTyping(false);
+  }
+
+  /** Só faz sentido com uma pessoa do outro lado: com o agent não há quem veja. */
+  function notifyTyping() {
+    if (!conversation || conversation.state === "agent" || conversation.state === "closed") return;
+    const t = Date.now();
+    if (t - typingSentRef.current < TYPING_NOTIFY_MS) return;
+    typingSentRef.current = t;
+    void api.typing(conversation.id).catch(() => undefined);
   }
 
   const blocked = conversation?.state === "closed" || (!!conversation && conversation.userMessages >= conversation.limit);
@@ -169,6 +184,7 @@ export function ChatScreen() {
         <MessageList
           messages={messages}
           streaming={streaming}
+          analystTyping={analystTyping}
           interactive={!sending && conversation?.state === "agent"}
           onOption={(o: Option) => void send({ optionId: o.id, text: o.label }, o.label)}
           onPickTicket={(t: TicketView) => void send({ text: `${t.id} · ${t.title}` }, `${t.id} · ${t.title}`)}
@@ -183,6 +199,7 @@ export function ChatScreen() {
         disabled={!loaded || sending || blocked}
         placeholder={blocked ? "Comece uma nova conversa para continuar" : undefined}
         onSend={(text) => void send({ text }, text)}
+        onTyping={notifyTyping}
         meta={
           conversation && (
             <>

@@ -4,16 +4,21 @@ import { requireSession } from "@/engine/auth/token";
 import { getConversation, listMessages } from "@/services/conversations/conversationService";
 import { assertConversationAccess, publicConversation } from "@/engine/conversation/view";
 import { runTurn, turnAsEventStream } from "@/engine/conversation/turn";
+import { typingState } from "@/engine/conversation/presence";
 
 export const runtime = "nodejs";
 
-/** Polling incremental: mensagens com id > `after` (respostas do analista, mensagens de sistema). */
+/** Polling incremental: mensagens com id > `after` (respostas do analista, mensagens de sistema) e se o analista está digitando. */
 export const GET = route(async (req, { params }: IdParams) => {
   const { user } = requireSession(req);
   const { id } = await params;
   const conv = assertConversationAccess(getConversation(id), user);
   const after = Number(new URL(req.url).searchParams.get("after") ?? "0");
-  return Response.json({ conversation: publicConversation(conv), messages: listMessages(id, { after: Number.isFinite(after) ? after : 0 }) });
+  return Response.json({
+    conversation: publicConversation(conv),
+    messages: listMessages(id, { after: Number.isFinite(after) ? after : 0 }),
+    typing: { analyst: typingState(id).analyst },
+  });
 });
 
 const body = z.object({ text: z.string().max(4000).optional(), optionId: z.string().max(80).optional() })

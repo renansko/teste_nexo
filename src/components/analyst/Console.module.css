@@ -1088,3 +1088,44 @@
     display: none;
   }
 }
+
+/* "Fulano está digitando": três pontos no balão do funcionário. */
+.typingDots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 6px 2px;
+}
+
+.typingDots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ink-3);
+  animation: consoleBlink 1.2s infinite ease-in-out;
+}
+
+.typingDots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typingDots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes consoleBlink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typingDots i {
+    animation: none;
+    opacity: 0.6;
+  }
+}
