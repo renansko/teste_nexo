@@ -109,6 +109,8 @@ export interface FlowState { flowId: string; data: FlowData; stepIndex: number; 
 export interface SuspendPrompt {
   text: string;
   options?: QuickOption[];
+  /** Cards que acompanham a pergunta (ex.: o artigo sugerido). Persistem com a run suspensa. */
+  payload?: PayloadPart[];
   stepKey?: string;
   data?: FlowData;
   /** Texto ao cancelar a pergunta (descarta a run suspensa). */

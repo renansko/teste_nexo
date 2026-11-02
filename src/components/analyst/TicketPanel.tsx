@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ChevronRight, X } from "lucide-react";
+import { CircleCheck, ChevronRight, X } from "lucide-react";
 import type { TicketView } from "@/lib/api";
 import { formatDateTime, formatDay } from "@/lib/format";
 import { statusDot } from "@/components/chat/payload/tones";
@@ -20,6 +20,7 @@ function deadline(t: TicketView): React.ReactNode {
  * Painel "Chamados do funcionário": resumo do que o assistente já apurou (para o atendente não perguntar tudo de novo),
  * o chamado da conversa em destaque e os demais, expansíveis.
  * `tickets === null`: sistema de chamados indisponível; só a lista degrada, resumo e conversa seguem visíveis.
+ * "Resolver chamado" (só no chamado da conversa, enquanto aberto) abre o `ResolveTicketDialog` pelo `onResolve`.
  */
 export function TicketPanel({
   employeeName,
@@ -27,12 +28,15 @@ export function TicketPanel({
   currentId,
   brief,
   onClose,
+  onResolve,
 }: {
   employeeName: string;
   tickets: TicketView[] | null;
   currentId: string | null;
   brief?: AssistantBrief | null;
   onClose: () => void;
+  /** Abre o diálogo "Resolver chamado" para o chamado desta conversa; ausente, o botão não aparece. */
+  onResolve?: (ticket: TicketView) => void;
 }) {
   const [expanded, setExpanded] = useState<string>();
   const list = tickets ?? [];
@@ -116,6 +120,12 @@ export function TicketPanel({
               </p>
               <p>{deadline(current)}</p>
               <div className={styles.currentFoot}>{current.description}</div>
+              {onResolve && OPEN.has(current.status) && (
+                <button type="button" className={`${styles.btnPrimary} ${styles.resolveBtn}`} onClick={() => onResolve(current)}>
+                  <CircleCheck size={15} aria-hidden />
+                  Resolver chamado
+                </button>
+              )}
             </div>
           </section>
         )}

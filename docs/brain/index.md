@@ -9,7 +9,9 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 - [Conversation](entities/Conversation.md) — Conversa, estados agent ↔ analista, flow ativo, ação pendente e limite.
 - [Ticket](entities/Ticket.md) — Chamado do Anexo A: tipo, categoria, prioridade, prazo, status.
 - [Employee](entities/Employee.md) — Funcionário/analista; fonte do login e da privacidade.
-- [HelpArticle](entities/HelpArticle.md) — Artigo da central de ajuda e sua busca.
+- [HelpArticle](entities/HelpArticle.md) — Artigo da central de ajuda e a busca unificada (artigos + memórias).
+- [HelpFeedback](entities/HelpFeedback.md) — "Isso resolveu?": resultado de cada sugestão da central, métrica e vínculo com o chamado.
+- [ResolutionMemory](entities/ResolutionMemory.md) — Solução escrita pelo analista ao resolver, pesquisável pelo agent; o que nunca entra.
 - [DecisionTrace](entities/DecisionTrace.md) — Trace por mensagem: ações, decisão, custo.
 
 ## Serviços
@@ -45,6 +47,9 @@ Leia esta página primeiro. Antes de alterar um conceito documentado, consulte e
 ## Mapa de símbolos
 
 - `runTurn`, `turnAsEventStream` → [Turn](functions/Turn.md)
+- `searchKnowledge`, `getKnowledge`, `rememberResolution` → [HelpArticle](entities/HelpArticle.md), [ResolutionMemory](entities/ResolutionMemory.md)
+- `openFeedback`, `answerFeedback`, `linkTicket`, `feedbackMetrics`, `suggestHelpArticle`, `interpretFeedback` → [HelpFeedback](entities/HelpFeedback.md)
+- `resolveTicket` → [ResolutionMemory](entities/ResolutionMemory.md), [TicketService](services/TicketService.md)
 - `wrapTools`, `TurnCollector` → [DecisionTrace](entities/DecisionTrace.md)
 - `startFlow`, `advanceFlow`, `resumeAtStep`, `answerStep`, `questionFor` → [FlowEngine](services/FlowEngine.md)
 - `hitl`, `observeSuspend`, `getMastra`, `discardSuspendedRun`, `openTicket` → [HumanInTheLoop](services/HumanInTheLoop.md)

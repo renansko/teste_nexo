@@ -25,6 +25,7 @@ Conversa entre funcionário, assistente (persona) e analista. Código: `src/serv
 - `transferSummary` sobrevive à devolução ao agent e entra no contexto do modelo ("já passou por um analista").
 - `transferReason` guarda o **código** (`user_request`, `critical`, `overdue`, `low_confidence`); a mensagem de sistema usa o rótulo humano (`AfterEffect.label`), nunca o código.
 - Toda conversa tem `assistant_id` (hoje sempre `nexo`), seam para multi-persona.
+- Um funcionário pode ter várias conversas (o chat dele retoma a mais recente aberta; "Nova conversa" cria outra sem fechar a anterior). O console do analista as apresenta como um único chat por pessoa ([AnalystConsoleApi](../functions/AnalystConsoleApi.md)); estado e ações continuam por conversa.
 - Presença "digitando" (funcionário/analista) **não** é estado da conversa: vive em memória com TTL de 4 s (`src/engine/conversation/presence.ts`), some num reinício sem prejuízo e é limpa ao enviar mensagem. Contrato em [ChatApi](../functions/ChatApi.md) e [AnalystConsoleApi](../functions/AnalystConsoleApi.md).
 
 ## Mensagens

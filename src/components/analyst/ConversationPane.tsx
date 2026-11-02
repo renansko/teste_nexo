@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
-  ArrowLeft, Bot, Check, ChevronDown, CircleCheck, Headset, Info, LoaderCircle, PanelRight, SendHorizontal, Ticket, Undo2, UserRoundCheck, X,
+  ArrowLeft, Bot, Check, ChevronDown, CircleCheck, Headset, Info, LoaderCircle, MessagesSquare, PanelRight, SendHorizontal, Ticket, Undo2,
+  UserRoundCheck, X,
 } from "lucide-react";
 import { analystApi, type AnalystConversationDetail, type ChatMessage, type SessionUser } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
@@ -156,9 +157,23 @@ function ModePill({ state, analystName }: { state: AnalystConversationDetail["co
   );
 }
 
+const SEGMENT_STATE: Record<string, string> = {
+  closed: "encerrada",
+  agent: "com o agent",
+  waiting_analyst: "aguardando atendente",
+  analyst: "em atendimento",
+};
+
+/**
+ * Chat único do funcionário: todas as conversas dele em ordem cronológica, a aberta no console incluída na posição dela.
+ * Cada conversa além da primeira começa com o divisor "Nova conversa"; as ações do rodapé valem só para a ativa.
+ */
 function History({ detail, me }: { detail: AnalystConversationDetail; me: SessionUser }) {
   const endRef = useRef<HTMLDivElement>(null);
-  const count = detail.messages.length;
+  const segments = [...detail.thread, { conversation: detail.conversation, messages: detail.messages }].sort((a, b) =>
+    a.conversation.createdAt.localeCompare(b.conversation.createdAt),
+  );
+  const count = segments.reduce((n, s) => n + s.messages.length, 0);
   const typing = detail.employeeTyping && detail.conversation.state !== "closed";
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -167,23 +182,37 @@ function History({ detail, me }: { detail: AnalystConversationDetail; me: Sessio
   const c = detail.conversation;
   const analystName = c.state === "analyst" ? (c.analystId === me.id ? "Você" : c.analyst?.name) : undefined;
   const rows: React.ReactNode[] = [];
-  let lastDay = "";
-  let prev: ChatMessage | undefined;
-  for (const m of detail.messages) {
-    const day = dayLabel(m.createdAt);
-    if (day !== lastDay) {
+  segments.forEach((seg, i) => {
+    const current = seg.conversation.id === c.id;
+    if (i > 0) {
       rows.push(
-        <span key={`d-${m.id}`} className={styles.day}>
-          {day}
-        </span>,
+        <p key={`s-${seg.conversation.id}`} className={styles.system} data-kind="thread">
+          <span>
+            <MessagesSquare size={13} aria-hidden />
+            Nova conversa · {dayLabel(seg.conversation.createdAt)} · {hhmm(seg.conversation.createdAt)}
+            {!current && ` · ${SEGMENT_STATE[seg.conversation.state] ?? seg.conversation.state}`}
+          </span>
+        </p>,
       );
-      lastDay = day;
-      prev = undefined;
     }
-    const grouped = prev?.role === m.role && m.role !== "system";
-    rows.push(<Row key={m.id} m={m} grouped={grouped} analystName={analystName ?? "Analista"} />);
-    prev = m;
-  }
+    let lastDay = "";
+    let prev: ChatMessage | undefined;
+    for (const m of seg.messages) {
+      const day = dayLabel(m.createdAt);
+      if (day !== lastDay) {
+        rows.push(
+          <span key={`d-${seg.conversation.id}-${m.id}`} className={styles.day}>
+            {day}
+          </span>,
+        );
+        lastDay = day;
+        prev = undefined;
+      }
+      const grouped = prev?.role === m.role && m.role !== "system";
+      rows.push(<Row key={`${seg.conversation.id}-${m.id}`} m={m} grouped={grouped} analystName={analystName ?? "Analista"} />);
+      prev = m;
+    }
+  });
 
   return (
     <div className={styles.scroll}>

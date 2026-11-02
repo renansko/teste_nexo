@@ -1,12 +1,13 @@
 # HumanInTheLoop
 
-Uma tool pode parar a run do agent para perguntar algo ao funcionário e continuar de onde parou quando ele responder (suspend/resume nativo do Mastra). Hoje só `open-ticket` usa. Código: `src/engine/tools/hitl.ts`, `src/engine/tools/wrap.ts`, `src/engine/agent/mastra.ts`, `src/engine/agent/mastraRunner.ts`, `src/engine/conversation/turn.ts`, `src/assistants/nexo/tools/ticketActions.ts`.
+Uma tool pode parar a run do agent para perguntar algo ao funcionário e continuar de onde parou quando ele responder (suspend/resume nativo do Mastra). Usam: `open-ticket` (perguntas do chamado) e `suggest-help-article` ("isso resolveu?", [HelpFeedback](../entities/HelpFeedback.md)). Código: `src/engine/tools/hitl.ts`, `src/engine/tools/wrap.ts`, `src/engine/agent/mastra.ts`, `src/engine/agent/mastraRunner.ts`, `src/engine/conversation/turn.ts`, `src/assistants/nexo/tools/ticketActions.ts`, `src/assistants/nexo/tools/helpCenter.ts`.
 
 ## Contrato
 
 - A tool declara `suspendSchema` (formato `SuspendPrompt { text, options?, stepKey?, data?, cancelText? }`) e `resumeSchema` (`TurnInput { text?, optionId? }`), e dentro de `execute` lê `hitl(context)`: `suspend(prompt)` + `return` para perguntar; `resumeData`/`suspendPayload` presentes só na retomada.
 - Na retomada a tool roda **de novo com o input original**; todo progresso (respostas acumuladas, passo atual) tem de viajar em `suspendPayload.data`/`stepKey`. Validação da resposta também é da tool (re-suspende com o erro como prefixo).
-- O engine só renderiza `text` + `options` (+ `cancel`) como mensagem do agent; não interpreta `stepKey`/`data`.
+- O engine renderiza `text` + `options` (+ `cancel`) e os cards de `payload` do prompt (ex.: o artigo sugerido) como mensagem do agent; não interpreta `stepKey`/`data`. Consultas feitas antes no mesmo turno não vão à tela.
+- Na retomada o modelo pode chamar **outra** tool HITL e a mesma run suspende de novo (novo `toolCallId`): sugestão → "não resolveu" → `open-ticket` na mesma run, sem turno novo (`mastraRunner.test.ts`, caso encadeado).
 - Para concluir, a tool devolve `{ outcome: FlowOutcome }`: rascunho (`pendingAction`), payload e ações sintéticas entram no turno como se viessem do flow ([PendingAction](PendingAction.md)).
 
 ## Engine

@@ -218,6 +218,21 @@ export function updateTicketStatus(id: string, status: TicketStatus, now = new D
   });
 }
 
+/** Analista resolve um chamado vivo: registra a solução como atualização e marca `resolvido`. */
+export function resolveTicket(id: string, resolution: { analystId: string; solution: string }, now = new Date()): Ticket {
+  return legacyGateway.call(() =>
+    transaction(() => {
+      const t = getRaw(id);
+      if (!t) throw notFound("Chamado");
+      assertCanUpdate(t);
+      const iso = now.toISOString();
+      insertUpdateRaw({ ticketId: id, authorId: resolution.analystId, authorRole: "analyst", text: `Resolvido: ${resolution.solution}`, createdAt: iso });
+      getDb().prepare(`UPDATE tickets SET status = 'resolvido', updated_at = ?, resolved_at = ? WHERE id = ?`).run(iso, iso, id);
+      return getRaw(id)!;
+    }),
+  );
+}
+
 /** Reabre chamado resolvido há até 7 dias; volta a `aberto` com novo prazo. */
 export function reopenTicket(id: string, reason: { authorId: string; text: string }, now = new Date(), opts: WriteOptions = {}): Ticket {
   return legacyGateway.call(() =>

@@ -23,9 +23,9 @@ Contrato HTTP do funcionário. Código: `src/app/api/auth/*`, `src/app/api/conve
 | `draft` | `TicketDraft` | [PendingAction](../services/PendingAction.md) |
 | `tickets` | `TicketView[]` | seletor/cards |
 | `ticket` | `{ ticket: TicketView, updates }` | detalhe |
-| `articles` | `{ id, title, body, category }[]` | central |
+| `articles` | `{ id, title, body, category, source? }[]` (`source`: `article` ou `resolution`, rótulo "Caso resolvido") | central (`cite-articles`, `suggest-help-article`) |
 
-Ids de opção reservados: `confirm`, `cancel` (rascunho, flow e pergunta HITL), `edit:<step>`; da Nexo: `falar-com-um-analista`, `abrir-um-chamado`, `criar-um-novo-mesmo-assim`, ids de chamado em minúsculas.
+Ids de opção reservados: `confirm`, `cancel` (rascunho, flow e pergunta HITL), `edit:<step>`; da Nexo: `falar-com-um-analista`, `abrir-um-chamado`, `criar-um-novo-mesmo-assim`, `resolveu`, `nao-resolveu` (resposta à sugestão da central), ids de chamado em minúsculas.
 
 ## SSE
 

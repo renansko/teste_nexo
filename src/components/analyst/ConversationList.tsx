@@ -92,6 +92,7 @@ export function ConversationList({ me, items, error, filter, onFilter, query, on
                   <span className={styles.tag} data-tone={tag.tone}>
                     <i aria-hidden />
                     {tag.label}
+                    {c.threadSize > 1 && <span className={styles.threadCount}>· {c.threadSize} conversas</span>}
                   </span>
                 </span>
               </button>

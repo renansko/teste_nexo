@@ -216,7 +216,7 @@ function ArticleList({ articles }: { articles: Article[] }) {
       {articles.map((a) => (
         <details key={a.id} className={styles.article}>
           <summary>
-            <span className={styles.ticketId}>Central de ajuda</span>
+            <span className={styles.ticketId}>{a.source === "resolution" ? "Caso resolvido" : "Central de ajuda"}</span>
             <span className={styles.ticketTitle}>{a.title}</span>
           </summary>
           <p>{a.body}</p>

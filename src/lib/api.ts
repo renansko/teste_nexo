@@ -113,6 +113,8 @@ export interface Article {
   id: string;
   title: string;
   body: string;
+  /** Artigo da central (padrão) ou solução de um caso já resolvido por um analista. */
+  source?: "article" | "resolution";
 }
 
 export type PayloadPart =
@@ -188,12 +190,21 @@ export interface AnalystConversation extends Conversation {
   lastMessage: (Omit<ChatMessage, "id"> & { id: string | number }) | null;
   /** Desde quando aguarda um analista (só em waiting_analyst). */
   waitingSince: string | null;
+  /** Conversas do funcionário no total (a lista mostra uma por funcionário: a ativa). */
+  threadSize: number;
+}
+/** Outra conversa do mesmo funcionário, mostrada no mesmo chat do console. */
+export interface ThreadSegment {
+  conversation: Conversation;
+  messages: ChatMessage[];
 }
 export interface AnalystConversationDetail {
   conversation: AnalystConversation;
   messages: ChatMessage[];
   /** `null`: sistema de chamados indisponível no momento (a conversa carrega mesmo assim; o polling tenta de novo). */
   tickets: TicketView[] | null;
+  /** As demais conversas do funcionário, da mais antiga para a mais nova (sem a `conversation`). */
+  thread: ThreadSegment[];
   /** Funcionário está digitando agora (presença efêmera, vem com o polling). */
   employeeTyping: boolean;
 }
@@ -208,8 +219,15 @@ const mutate = async (id: string, action: string, body = "{}") => {
 export const analystApi = {
   list: (q?: string) => request<AnalystConversation[]>(`/api/analyst/conversations${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   async get(id: string): Promise<AnalystConversationDetail> {
-    const d = await request<{ conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] | null; typing?: { employee: boolean } }>(analystPath(id));
-    return { conversation: d.conversation, messages: d.messages.map(toMessage), tickets: d.tickets, employeeTyping: d.typing?.employee ?? false };
+    const d = await request<{
+      conversation: AnalystConversation; messages: RawMessage[]; tickets: TicketView[] | null; typing?: { employee: boolean };
+      thread?: { conversation: Conversation; messages: RawMessage[] }[];
+    }>(analystPath(id));
+    return {
+      conversation: d.conversation, messages: d.messages.map(toMessage), tickets: d.tickets,
+      thread: (d.thread ?? []).map((t) => ({ conversation: t.conversation, messages: t.messages.map(toMessage) })),
+      employeeTyping: d.typing?.employee ?? false,
+    };
   },
   /** Avisa que o analista está digitando (só quem assumiu; reenviar a cada ~1,5 s). */
   typing: (id: string) => request<{ ok: true }>(analystPath(id, "/typing"), { method: "POST", body: "{}" }),
@@ -217,7 +235,25 @@ export const analystApi = {
   reply: (id: string, text: string) => mutate(id, "/messages", JSON.stringify({ text })),
   giveBack: (id: string) => mutate(id, "/return"),
   close: (id: string) => mutate(id, "/close"),
+  /** Resolve um chamado vivo com a solução em texto; ela vira memória pesquisável pelo agent. */
+  resolveTicket: (ticketId: string, solution: string) =>
+    request<{ ticket: TicketView; memoryId: string }>(`/api/analyst/tickets/${encodeURIComponent(ticketId)}/resolve`, { method: "POST", body: JSON.stringify({ solution }) }),
+  /** Acertos e erros das sugestões da central por artigo/solução. */
+  helpMetrics: () => request<HelpMetric[]>("/api/analyst/help-center/metrics"),
 };
+
+export interface HelpMetric {
+  source: "article" | "resolution";
+  sourceId: string;
+  title: string | null;
+  shown: number;
+  resolved: number;
+  notResolved: number;
+  analyst: number;
+  unclear: number;
+  pending: number;
+  resolutionRate: number | null;
+}
 
 // ---------- SSE ----------
 

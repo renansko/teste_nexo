@@ -3,6 +3,7 @@
  * @wiki docs/brain/functions/Turn.md
  */
 import { addMessage, getConversation, updateConversation, type Message } from "@/services/conversations/conversationService";
+import { linkTicket } from "@/services/helpCenter/feedbackService";
 import { getAssistant } from "../registry";
 import type { AfterEffect, AssistantHooks, QuickOption } from "../types";
 
@@ -30,6 +31,8 @@ export function applyAfterEffects(conversationId: string, effects: AfterEffect[]
       runHook(conv.assistantId, "onTransferred", { id: updated.id, employeeId: updated.employeeId, ticketId: updated.ticketId }, { reason: e.reason, now });
     } else if (e.type === "link-ticket") {
       updateConversation(conversationId, { ticketId: e.ticketId }, now);
+      // Sugestões da central feitas nesta conversa passam a apontar para o chamado (trilha "artigo tentado → chamado").
+      linkTicket(conversationId, e.ticketId);
     }
   }
   return out;

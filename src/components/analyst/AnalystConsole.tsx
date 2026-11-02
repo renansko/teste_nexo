@@ -7,12 +7,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LogOut, MessagesSquare } from "lucide-react";
-import { analystApi, ApiError, type AnalystConversation, type AnalystConversationDetail } from "@/lib/api";
+import { analystApi, ApiError, type AnalystConversation, type AnalystConversationDetail, type TicketView } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui/Dialog";
 import { NexoMark } from "@/components/NexoMark";
 import { initialsOf, useSession } from "@/components/session/SessionProvider";
 import { ConversationList } from "./ConversationList";
 import { ConversationPane, type PaneAction } from "./ConversationPane";
 import { TicketPanel } from "./TicketPanel";
+import { ResolveTicketDialog } from "./ResolveTicketDialog";
 import { assistantBrief, type Filter } from "./labels";
 import styles from "./Console.module.css";
 
@@ -40,6 +42,9 @@ export function AnalystConsole() {
   const [busy, setBusy] = useState<PaneAction | "reply">();
   // Em telas estreitas o painel de chamados sobrepõe a conversa: começa fechado (abre pelo ícone do cabeçalho).
   const [ticketsOpen, setTicketsOpen] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 1281px)").matches);
+  // Diálogos do produto no lugar de confirm()/prompt(): encerrar atendimento e resolver chamado.
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [resolving, setResolving] = useState<TicketView | null>(null);
 
   // ---- Lista: busca no servidor (debounce) + polling ----
   const queryRef = useRef(query);
@@ -92,7 +97,11 @@ export function AnalystConsole() {
 
   async function act(action: PaneAction) {
     if (!selectedId || busy) return;
-    if (action === "close" && !window.confirm("Encerrar o atendimento? O funcionário não poderá mais enviar mensagens nesta conversa.")) return;
+    if (action === "close" && !confirmClose) {
+      setConfirmClose(true);
+      return;
+    }
+    setConfirmClose(false);
     setBusy(action);
     setPaneError(undefined);
     try {
@@ -114,6 +123,12 @@ export function AnalystConsole() {
     const s = detail.conversation.state;
     if (s === "waiting_analyst" || s === "agent") await act("take");
     setTicketsOpen(true);
+  }
+
+  /** Chamado resolvido pelo diálogo: o painel e a lista recarregam para refletir o novo estado. */
+  async function resolved() {
+    setResolving(null);
+    if (selectedId) await Promise.all([refreshDetail(selectedId), refreshList()]);
   }
 
   async function reply(text: string): Promise<boolean> {
@@ -189,8 +204,21 @@ export function AnalystConsole() {
           currentId={detail.conversation.ticketId}
           brief={assistantBrief(detail)}
           onClose={() => setTicketsOpen(false)}
+          onResolve={setResolving}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmClose}
+        tone="danger"
+        title="Encerrar o atendimento?"
+        description="O funcionário não poderá mais enviar mensagens nesta conversa."
+        confirmLabel="Encerrar atendimento"
+        busy={busy === "close"}
+        onConfirm={() => void act("close")}
+        onClose={() => setConfirmClose(false)}
+      />
+      <ResolveTicketDialog ticket={resolving} onResolved={() => void resolved()} onClose={() => setResolving(null)} />
     </div>
   );
 }

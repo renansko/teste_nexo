@@ -320,7 +320,8 @@ class TurnHelpers {
       const prompt = collector.suspended?.prompt ?? (result.suspended.payload as SuspendPrompt);
       const run: SuspendedRun = { runId: result.suspended.runId, toolCallId: result.suspended.toolCallId, toolId: result.suspended.toolId, prompt, startedAt: this.now.toISOString() };
       updateConversation(this.conversationId, { suspendedRun: run, pendingAction: null, activeFlow: null }, this.now);
-      const payload = mergeOptions([], [...(prompt.options ?? []), CANCEL_OPTION]);
+      // Só o que a própria pergunta traz vai à tela (cards do prompt); consultas feitas antes no turno não.
+      const payload = mergeOptions([...(prompt.payload ?? [])], [...(prompt.options ?? []), CANCEL_OPTION]);
       trace.notes = [...collector.notes, `${run.toolId}: aguardando resposta do funcionário`];
       trace.durationMs = Date.now() - started;
       this.reply(text ? `${text}\n\n${prompt.text}` : prompt.text, payload, trace, started);

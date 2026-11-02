@@ -6,6 +6,8 @@ Resumo do PRD "Desafio Técnico: Nexo Assist, o agent do service desk de TI" (Be
 
 Funcionário resolve dúvidas no chat, abre chamados completos (tipo, categoria, prioridade, sem duplicidade), é encaminhado ao analista na hora certa com contexto, e consegue ver o que o agent fez e por quê (transparência é o critério mais importante).
 
+"Resolução sem fila" é medida: cada procedimento sugerido pelo agent termina em "isso resolveu?" e o resultado fica em [HelpFeedback](../entities/HelpFeedback.md) (métrica por artigo em `GET /api/analyst/help-center/metrics`). A central de ajuda também aprende: a solução que o analista escreve ao resolver um chamado vira [ResolutionMemory](../entities/ResolutionMemory.md), pesquisável pelo agent.
+
 ## Histórias
 
 Funcionário: tirar dúvida sem chamado; saber status de um chamado sem lembrar o número e se está atrasado; complementar chamado; abrir chamado conversando, conferindo antes; falar com analista quando preferir ou se for grave; voltar outro dia e continuar.

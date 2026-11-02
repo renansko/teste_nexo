@@ -4,7 +4,7 @@
  * Idempotente: funcionários/artigos por id; chamados só se a tabela estiver vazia.
  */
 import { upsertEmployee, type Employee } from "@/services/employees/employeeService";
-import { upsertArticle, type HelpArticle } from "@/services/helpCenter/helpCenterService";
+import { rememberResolution, upsertArticle, type HelpArticle, type ResolutionMemory } from "@/services/helpCenter/helpCenterService";
 import { countTickets, insertTicketRaw, insertUpdateRaw } from "@/services/tickets/ticketService";
 import { computeDueAt } from "@/services/tickets/sla";
 import type { Ticket } from "@/services/tickets/types";
@@ -133,6 +133,18 @@ const TICKETS: SeedTicket[] = [
   },
 ];
 
+/**
+ * Memória de resolução de exemplo (o que o analista escreveu ao resolver): só título, tipo, categoria e solução.
+ * Entra junto dos chamados (depende do chamado existir) para o agent ter um "caso resolvido" desde o início.
+ */
+const MEMORIES: (Omit<ResolutionMemory, "id" | "resolvedAt"> & { resolvedAgoMs: number })[] = [
+  {
+    ticketId: "INC-20150", type: "INC", category: "Acesso", title: "Senha do SAP bloqueada",
+    solution: "Usuário desbloqueado pela equipe de Acesso no SAP e senha temporária enviada ao e-mail corporativo; trocar a senha no primeiro login. Para agilizar, informe o usuário SAP na descrição do chamado.",
+    triedArticleIds: ["article:kb-sap-senha"], resolvedBy: "an-fabio", resolvedAgoMs: 4 * D,
+  },
+];
+
 export function seedNexo(now = new Date()): { employees: number; articles: number; tickets: number } {
   for (const e of EMPLOYEES) upsertEmployee(e);
   for (const a of ARTICLES) upsertArticle(a);
@@ -152,6 +164,10 @@ export function seedNexo(now = new Date()): { employees: number; articles: numbe
         insertUpdateRaw({ ticketId: s.id, authorId: u.authorId, authorRole: u.authorRole, text: u.text, createdAt: new Date(now.getTime() - u.agoMs).toISOString() });
       }
       tickets += 1;
+    }
+    for (const m of MEMORIES) {
+      const { resolvedAgoMs, ...rest } = m;
+      rememberResolution({ ...rest, resolvedAt: new Date(now.getTime() - resolvedAgoMs).toISOString() });
     }
   }
   return { employees: EMPLOYEES.length, articles: ARTICLES.length, tickets };

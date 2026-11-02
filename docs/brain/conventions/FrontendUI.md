@@ -28,6 +28,7 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 
 ## Console do analista (`src/components/analyst/`)
 
+- Um chat por funcionário: a lista traz um item por pessoa (a conversa ativa, com "· N conversas" quando há mais de uma) e o histórico monta todas as conversas dela em ordem cronológica, separadas pelo divisor "Nova conversa · data · estado" (`History` em `ConversationPane.tsx`, a partir de `detail.thread`). Cabeçalho, rodapé e ações valem para a conversa ativa; os chamados da pessoa ficam no painel lateral.
 - Filtros calculados no cliente sobre a lista inteira: "Para você" = `waiting_analyst`; "Com o agent" = `agent`; "Minhas" = `analyst` com `analystId` = eu. A busca vai ao servidor (`q`, debounce 250 ms).
 - Polling: lista a cada 4 s, conversa aberta a cada 3 s (sem push). Ações (assumir, devolver, encerrar, responder) recarregam conversa e lista.
 - "Digitando": o detalhe traz `employeeTyping`; o histórico mostra um balão do funcionário com três pontos no fim. O composer de quem assumiu avisa `POST typing` a cada 1,5 s enquanto há texto (`ConversationPane`, sem passar pelo `AnalystConsole`). Latência visível ≈ polling + TTL de 4 s.
@@ -35,6 +36,7 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 - Cards estruturados (rascunho, chamados, opções) aparecem como resumo em texto: o analista vê o que o funcionário recebeu, sem botões.
 - Conversa com `ticketId` tem o botão **"Ver chamado"** no cabeçalho; em `waiting_analyst`/`agent` ele vira "Ver chamado e atender": chama `take` e abre o painel, então ao fechá-lo o analista já está respondendo. Sem `ticketId`, fica o ícone que só abre o painel.
 - Painel de chamados começa com **"Resumo do assistente"** (`assistantBrief` em `labels.ts`): motivo e resumo da transferência, última `report-decision` (entendeu/fez/por quê/segurança), passos concluídos e artigos indicados. Derivado do que já está nas mensagens; nenhuma chamada nova ao modelo.
+- Diálogos do produto, nunca `window.confirm`/`prompt`: `src/components/ui/Dialog.tsx` (`<dialog>` nativo com `showModal`, Esc e clique no fundo fecham, salvo `busy`; tom `danger` para encerrar). "Encerrar atendimento" passa pelo `ConfirmDialog`; "Resolver chamado" (`ResolveTicketDialog`, botão no chamado da conversa enquanto aberto) pede a solução (10 a 2000 caracteres, mesmas regras do `POST .../resolve`), mapeia `TICKET_NOT_OPEN`/404/503 em texto e, ao resolver, recarrega conversa e lista.
 - ≤ 1280 px o painel de chamados sobrepõe a conversa e começa fechado; ≤ 1100 px o rodapé põe os botões em linha própria e o cabeçalho esconde a pílula de estado (o rodapé já o diz); ≤ 720 px lista e conversa viram telas alternadas e os botões ficam só com ícone.
 
 ## Pendências
@@ -42,3 +44,5 @@ Front em Next (App Router) seguindo o protótipo do Anexo C (arquivo Pencil `nex
 - Números da vitrine do login ("8 s", "72%") são estáticos; não há métrica no backend.
 - "Redefinir senha" desabilitado: a API não tem esse fluxo.
 - Mensagens do analista não guardam o autor: o console mostra o analista atual da conversa.
+- Console sem tela de métricas da central; a API já existe (`analystApi.helpMetrics`, [AnalystConsoleApi](../functions/AnalystConsoleApi.md)).
+- "Resolver chamado" só aparece para o chamado da conversa; os demais chamados do funcionário não têm ação no painel.

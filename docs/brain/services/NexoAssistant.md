@@ -6,8 +6,9 @@ Persona "Nexo Assist". Código: `src/assistants/nexo/persona.ts`, `instructions.
 
 | Tool | Rótulo | Observações |
 |---|---|---|
-| `search-help-center` | buscou na central de ajuda (`quiet`: não aparece na linha de passos do chat) | resultados só para o agent ler; payload apenas a opção `abrir-um-chamado`, sempre (regra: da central dá para seguir ao chamado) |
-| `cite-articles` (oculta) | — | payload `articles` só com os artigos que o agent usou (máx. 2, ids conferidos); nenhum se nada se aplica |
+| `search-help-center` | buscou na central de ajuda (`quiet`: não aparece na linha de passos do chat) | `searchKnowledge`: artigos **e** soluções de casos resolvidos ([ResolutionMemory](../entities/ResolutionMemory.md)), só para o agent ler; payload apenas a opção `abrir-um-chamado`, sempre (regra: da central dá para seguir ao chamado) |
+| `cite-articles` (oculta) | — | payload `articles` só com os artigos que o agent usou numa resposta informativa (máx. 2, ids conferidos); nenhum se nada se aplica |
+| `suggest-help-article` | sugeriu um artigo da central / sugeriu uma solução de caso resolvido | HITL: mostra o card no próprio prompt (`payload`), pergunta "isso resolveu?" com `resolveu`, `nao-resolveu`, `falar-com-um-analista` e suspende a run; na retomada grava [HelpFeedback](../entities/HelpFeedback.md) e devolve `{ feedback, employeeText, next }` para o modelo seguir (agradecer, `open-ticket` ou `transfer-to-analyst`). Id inexistente → erro `KNOWLEDGE_NOT_FOUND` |
 | `list-my-tickets` | consultou seus chamados / verificou se já existe chamado parecido | `purpose=show` (padrão): payload `tickets` + opções (até 4; "Falar com um analista" se há vencido). `purpose=check`: só para o agent checar duplicidade, sem payload |
 | `get-my-ticket` | consultou o chamado X | payload `ticket` com updates; opção de analista se vencido |
 | `open-ticket` | montou o chamado / recusou chamado fora do escopo de TI | HITL: pré-preenche título/descrição/tipo/categoria, pergunta o resto suspendendo a run e devolve `{ outcome }` com o rascunho; `forceNew` ignora duplicidade; `relatedTicketId` = chamado que o agent julga ser o mesmo problema (pega paráfrases), conferido pelo flow. Antes de tudo, na primeira execução, `detectOutOfScope` (`scope.ts`) pode devolver `{ refused: "OUT_OF_SCOPE" }` ([ServiceDeskRules](../conventions/ServiceDeskRules.md)) |
@@ -20,12 +21,13 @@ Executores (`actions.ts`): `create-ticket` (crítico → transfer automático), 
 ## Decisões de prompt
 
 - Instruções estáveis em `instructions.ts` (cacheáveis); nada de data/usuário ali.
-- `report-decision` obrigatória como última tool; a confiança declarada é gatilho de segurança no engine. Exceção documentada: quando `open-ticket` pausa a conversa, a decisão vem no turno em que a execução continua.
-- Regra geral das tools: consulta é para o agent decidir; o que vai à tela é o que ele escolheu usar (`cite-articles`, `purpose=show`, rascunho). Resultado de busca nunca vira card sozinho; a única exceção determinística é a opção "Abrir um chamado" após a busca na central.
+- `report-decision` obrigatória como última tool; a confiança declarada é gatilho de segurança no engine. Exceção documentada: quando `open-ticket` ou `suggest-help-article` pausa a conversa, a decisão vem no turno em que a execução continua.
+- Ordem de decisão nas instruções: identificar o problema → central de ajuda → chamado. Procedimento que deve resolver vai por `suggest-help-article` (mede o resultado); resposta informativa (horário, prazo, regra) vai no texto com `cite-articles`, sem perguntar se resolveu. Não há segundo agent: a abertura de chamado já é determinística dentro da `open-ticket`.
+- Regra geral das tools: consulta é para o agent decidir; o que vai à tela é o que ele escolheu usar (`cite-articles`, `suggest-help-article`, `purpose=show`, rascunho). Resultado de busca nunca vira card sozinho; a única exceção determinística é a opção "Abrir um chamado" após a busca na central.
 - Tom: o agent não narra fontes ("a central de ajuda não trouxe…"); os passos já aparecem acima da resposta.
 - Duplicidade sempre pelo `open-ticket`: o agent checa com `purpose=check`, indica `relatedTicketId` e deixa a tool propor complemento/reabertura com confirmação; não resolve no texto.
 - Tipo e categoria **não** usam LLM extra: o agent pré-preenche quando tem certeza; a tool pergunta com opções quando não. Impacto e urgência são sempre perguntados ao funcionário (matriz do Anexo A). `fastModel` fica reservado para um classificador/guardrail futuro.
-- Modelo único `openai/gpt-6-luna` (`NEXO_MODEL`, formato `provedor/modelo`), `maxSteps: 6`, janela de 20 mensagens, limite de 30 mensagens do funcionário.
+- Modelo único `openai/gpt-6-luna` (`NEXO_MODEL`, formato `provedor/modelo`), `maxSteps: 8` (busca → sugestão → retomada → `open-ticket` → `report-decision`), janela de 20 mensagens, limite de 30 mensagens do funcionário.
 - O flow `open-ticket` continua registrado em `flows` só para "Editar X" do rascunho ([FlowEngine](FlowEngine.md)).
 
 Ver [HumanInTheLoop](HumanInTheLoop.md), [PendingAction](PendingAction.md), [ServiceDeskRules](../conventions/ServiceDeskRules.md).

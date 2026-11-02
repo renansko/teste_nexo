@@ -304,6 +304,12 @@
   background: #1b243155;
 }
 
+.threadCount {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
 .tag[data-tone="danger"] {
   color: var(--danger-text);
 }
@@ -697,6 +703,17 @@
   flex-shrink: 0;
 }
 
+/* Divisor entre conversas do mesmo funcionário (chat único do console) */
+.system[data-kind="thread"] {
+  padding-top: 28px;
+  color: var(--ink-2);
+}
+
+.system[data-kind="thread"]::before,
+.system[data-kind="thread"]::after {
+  background: #1b243128;
+}
+
 .dock {
   flex-shrink: 0;
   display: flex;
@@ -902,6 +919,12 @@
 .overdue {
   color: var(--danger-text);
   font-weight: 600;
+}
+
+.resolveBtn {
+  margin-top: 12px;
+  align-self: flex-start;
+  padding-right: 14px;
 }
 
 .currentFoot {
