@@ -22,6 +22,8 @@ flowchart LR
 - Docker: `cp .env.example .env`, preencha as chaves, `docker compose up --build` (volume `nexo-data` guarda o banco).
 - `npm test` (sem rede) · `npm run typecheck` · `npm run seed` recria os dados de exemplo.
 
+**Por onde olhar.** Em um minuto: abra um chamado como funcionário e veja o raciocínio em "Ver raciocínio" no console do analista. No código, três pontos: a abertura de chamado pausa a run do agent e retoma com a resposta do funcionário (seção 5); a confirmação vira outbox com chave de idempotência, então o legado pode cair sem duplicar chamado (seção 7); o trace de decisão fica com o analista, o funcionário vê só as ações (seção 8).
+
 **Deploy.** Sem banco externo: o SQLite roda no container. Qualquer PaaS que construa um `Dockerfile` serve, com `OPENAI_API_KEY`, `NEXO_AUTH_SECRET` (16+ caracteres), `NODE_ENV=production`, `NEXO_DB_PATH=/app/data/nexo.db`, porta `3000`, health check em `/entrar`. No **Render Free** (New Web Service → repositório → Docker) o serviço dorme após 15 min e o disco é efêmero: a cada hibernação ou deploy o banco volta ao seed. Para persistir de graça, uma VM Always Free da Oracle com este `docker compose` e um proxy TLS (`x-forwarded-proto: https` deixa o cookie `Secure`). Defina limite de gasto na OpenAI; não há rate limit por IP.
 
 ## 2. Visão geral
@@ -83,7 +85,7 @@ O modelo só entra na última caixa. Tudo antes dela é regra: estado, run pausa
 
 ## 4. Decisões de IA e custo
 
-Princípio: **a IA decide só o que exige entender linguagem** (qual é o problema, qual artigo se aplica, como conduzir). Tudo que é fato, regra do Anexo A ou efeito colateral é código determinístico, testado e com custo zero de modelo. Nos pontos mistos a IA propõe e a regra confere.
+O PRD coloca aqui o centro do desafio, e foi onde o esforço se concentrou. Princípio: **a IA decide só o que exige entender linguagem** (qual é o problema, qual artigo se aplica, como conduzir). Tudo que é fato, regra do Anexo A ou efeito colateral é código determinístico, testado e com custo zero de modelo. Nos pontos mistos a IA propõe e a regra confere. Resultado: menos chamadas ao modelo e comportamento previsível justamente onde há efeito colateral.
 
 ```mermaid
 flowchart LR
@@ -254,4 +256,4 @@ curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $
 | **Confiança categórica** | percentual | o modelo não é calibrado; um número daria precisão falsa |
 | **Validação de entrada por regex** | classificador por mensagem | custo zero e sem falso positivo em mensagens curtas legítimas ("oi", "vpn"); palavras reais sem sentido ainda vão ao modelo, que pede detalhes (seção 4) |
 
-Próximos passos: guardrails por classificador com confiança (`NEXO_FAST_MODEL`, `inputProcessors` do Mastra) para escopo, INC/REQ e texto sem sentido que o regex não pega; promover memória recorrente a artigo da FAQ; multi-persona (tabela de personas, chaves por integrador); avaliação automática com conversas de referência contra o modelo real.
+**O que ficou de fora e por quê.** Guardrails por classificador com confiança (`NEXO_FAST_MODEL`, `inputProcessors` do Mastra) para escopo, INC/REQ e texto sem sentido que o regex não pega: o regex cobre os casos medidos e um classificador erraria em mensagens curtas legítimas, então ficou como próximo passo. Persistência no deploy gratuito: o disco do Render Free é efêmero (seção 1). Também não feitos: promover memória recorrente a artigo da FAQ; multi-persona (tabela de personas, chaves por integrador); avaliação automática com conversas de referência contra o modelo real. As decisões e invariantes deste README vivem em [docs/brain](docs/brain/index.md), mantido junto com o código a cada mudança.
