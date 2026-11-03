@@ -52,6 +52,23 @@ test("agent consulta chamados: cards, opções, trace com ações e decisão, ev
   assert.equal(getConversation(conv.id)!.userMessageCount, 1);
 });
 
+test("um turno por conversa: segundo envio durante a resposta é recusado (TURN_IN_PROGRESS) e nada é gravado", async () => {
+  const conv = newConv();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  const runner = scriptedRunner(async () => { await gate; return "pronto"; });
+  const first = runTurn({ conversationId: conv.id, user: ana(), input: { text: "minha vpn caiu" }, runner });
+  await new Promise((r) => setTimeout(r, 0));
+  await assert.rejects(runTurn({ conversationId: conv.id, user: ana(), input: { text: "e aí?" }, runner }), { code: "TURN_IN_PROGRESS", status: 409 });
+  release();
+  await first;
+  assert.equal(getConversation(conv.id)!.userMessageCount, 1); // o segundo envio não virou mensagem
+  const r = await runTurn({ conversationId: conv.id, user: ana(), input: { text: "e aí?" }, runner });
+  assert.equal(r.messages[0]!.content, "pronto"); // trava liberada no fim do turno
+  const other = createConversation({ assistantId: "nexo", employeeId: "emp-ana" });
+  assert.equal((await runTurn({ conversationId: other.id, user: ana(), input: { text: "oi" }, runner })).messages.length, 1); // trava é por conversa
+});
+
 test("clique em opção grava o rótulo como mensagem do usuário", async () => {
   const conv = newConv();
   addMessage(conv.id, { role: "agent", content: "?", payload: [{ kind: "options", data: [{ id: "abrir-um-chamado", label: "Abrir um chamado" }] }] });

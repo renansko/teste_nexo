@@ -2,12 +2,13 @@
 /**
  * Console do analista (Anexo C, telas 4 e 5): lista de conversas, conversa com o raciocínio do agent,
  * assumir / responder / devolver / encerrar e painel com os chamados do funcionário.
- * Atualização por polling (lista e conversa aberta).
+ * Atualização por polling (lista e conversa aberta), pausado com a aba oculta.
  * @wiki docs/brain/conventions/FrontendUI.md
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LogOut, MessagesSquare } from "lucide-react";
 import { analystApi, ApiError, type AnalystConversation, type AnalystConversationDetail, type TicketView } from "@/lib/api";
+import { usePolling } from "@/lib/usePolling";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { NexoMark } from "@/components/NexoMark";
 import { initialsOf, useSession } from "@/components/session/SessionProvider";
@@ -65,10 +66,7 @@ export function AnalystConsole() {
     return () => clearTimeout(t);
   }, [query, refreshList]);
 
-  useEffect(() => {
-    const t = setInterval(() => void refreshList(), POLL_LIST_MS);
-    return () => clearInterval(t);
-  }, [refreshList]);
+  usePolling(refreshList, POLL_LIST_MS);
 
   // ---- Conversa aberta ----
   const selectedRef = useRef(selectedId);
@@ -91,9 +89,8 @@ export function AnalystConsole() {
     setPaneError(undefined);
     setDetailLoading(true);
     void refreshDetail(selectedId).finally(() => setDetailLoading(false));
-    const t = setInterval(() => void refreshDetail(selectedId), POLL_DETAIL_MS);
-    return () => clearInterval(t);
   }, [selectedId, refreshDetail]);
+  usePolling(() => (selectedId ? refreshDetail(selectedId) : undefined), POLL_DETAIL_MS, !!selectedId);
 
   async function act(action: PaneAction) {
     if (!selectedId || busy) return;

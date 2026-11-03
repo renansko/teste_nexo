@@ -4,7 +4,7 @@
 
 ## Ordem de decisão
 
-1. Conversa deve existir e ser do usuário (senão `NOT_FOUND`); `closed` → `CONVERSATION_CLOSED`; limite → `MESSAGE_LIMIT`.
+1. Conversa deve existir e ser do usuário (senão `NOT_FOUND`); turno já em andamento nela → `TURN_IN_PROGRESS` (409, nada gravado); `closed` → `CONVERSATION_CLOSED`; limite → `MESSAGE_LIMIT`.
 2. Grava a mensagem do usuário (texto, ou rótulo da opção clicada resolvido no último payload `options`).
 3. Estado ≠ `agent` → termina (fila do analista).
 4. Run suspensa ([HumanInTheLoop](../services/HumanInTheLoop.md)): `cancel`/texto de cancelar descarta e responde (`source: rule`); senão retoma o agent com `{ text, optionId }` e segue ao passo 7.
@@ -17,6 +17,7 @@
 ## Invariantes
 
 - Um turno pode produzir 0..n mensagens; cada uma emite `message.end`.
+- Um turno por conversa por vez (`turnsInFlight`, em memória do processo): o segundo envio concorrente é recusado em vez de rodar outro turno (e outra chamada ao modelo) em paralelo; é o teto de custo por pessoa junto com o limite de mensagens. Com mais de um processo a trava teria de ir ao banco.
 - Erros de domínio no SSE viram evento `error` (sem fechar com 4xx); em JSON viram status.
 - Mensagem do usuário é gravada mesmo se o agent falhar (`AGENT_ERROR`) ou se for barrada pela validação; o texto gravado é o normalizado (`normalizeInput`).
 - O passo 6a é o único ponto por onde texto livre chega ao modelo; `optionId`, flow, rascunho e run suspensa saem antes dele.

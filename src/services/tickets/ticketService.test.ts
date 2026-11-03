@@ -2,6 +2,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { MONDAY_10H, useTempDb } from "@/test/helpers";
 import { closeDb } from "@/lib/db";
+import { AppError } from "@/lib/errors";
 import * as tk from "./ticketService";
 import { legacyGateway, withRetry } from "./legacyGateway";
 import { searchArticles } from "@/services/helpCenter/helpCenterService";
@@ -82,6 +83,34 @@ test("sistema legado indisponível por uma janela; retry recupera", async () => 
   assert.equal(result?.id, "INC-20311");
   assert.equal(attempts, 3);
   assert.deepEqual(retries, [1, 2]);
+});
+
+test("circuit breaker: falha recente responde na hora sem tentar; expira ou fecha com sucesso", async () => {
+  let clock = 0;
+  const noSleep = async () => {};
+  legacyGateway.configure({ rate: 1, durationMs: 60_000, breakerMs: 2000, now: () => clock });
+  // Quem encontra a falha faz os retries (sondas) e abre o breaker.
+  const probes: number[] = [];
+  await assert.rejects(withRetry(() => tk.getTicket("INC-20311"), { sleep: noSleep, onRetry: (a) => probes.push(a) }), { code: "TICKET_SERVICE_UNAVAILABLE" });
+  assert.deepEqual(probes, [1, 2]);
+  assert.equal(legacyGateway.isOpen, true);
+  // Quem chega depois, dentro do cooldown, falha sem tentar nem esperar.
+  let tried = 0;
+  await assert.rejects(withRetry(() => { tried += 1; return tk.getTicket("INC-20311"); }, { sleep: noSleep }), (e: unknown) => {
+    assert.ok(e instanceof AppError && e.code === "TICKET_SERVICE_UNAVAILABLE");
+    assert.deepEqual(e.details, { circuitOpen: true });
+    return true;
+  });
+  assert.equal(tried, 0);
+  // Cooldown vencido: a chamada seguinte é uma sonda; com o legado de volta, fecha o breaker.
+  clock = 2000;
+  legacyGateway.configure({ rate: 0, now: () => clock });
+  legacyGateway.tripBreaker();
+  clock = 4000;
+  const { result, attempts } = await withRetry(() => tk.getTicket("INC-20311"), { sleep: noSleep });
+  assert.equal(result?.id, "INC-20311");
+  assert.equal(attempts, 1);
+  assert.equal(legacyGateway.isOpen, false);
 });
 
 test("estado sobrevive a reinício", () => {

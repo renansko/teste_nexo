@@ -11,21 +11,38 @@ export interface OutageConfig {
   rate: number;
   /** Duração da janela em ms. */
   durationMs: number;
+  /** Circuit breaker (lado cliente): por quanto tempo, após uma falha, as chamadas falham na hora sem tentar. */
+  breakerMs: number;
   random: () => number;
   now: () => number;
 }
 
-export const unavailableError = () =>
-  new AppError("TICKET_SERVICE_UNAVAILABLE", "Sistema de chamados temporariamente indisponível", 503);
+/** Cooldown padrão do breaker: a ordem de grandeza da janela do PRD ("alguns segundos"). */
+export const BREAKER_MS = 2000;
 
+export const unavailableError = (circuitOpen = false) =>
+  new AppError(
+    "TICKET_SERVICE_UNAVAILABLE",
+    circuitOpen ? "Sistema de chamados indisponível (circuito aberto)" : "Sistema de chamados temporariamente indisponível",
+    503,
+    circuitOpen ? { circuitOpen: true } : undefined,
+  );
+
+/**
+ * Dois relógios distintos: `downUntil` é o sistema remoto simulado (não controlamos); `openUntil` é o nosso
+ * circuit breaker, que lembra a última falha e evita gastar retries (e segurar conexões) enquanto ele provavelmente
+ * segue fora. Os dois usam `config.now` para os testes injetarem o mesmo relógio.
+ */
 export class LegacyGateway {
   private downUntil = 0;
+  private openUntil = 0;
   private config: OutageConfig;
 
   constructor(config?: Partial<OutageConfig>) {
     this.config = {
       rate: env().NEXO_TICKETS_OUTAGE_RATE,
       durationMs: env().NEXO_TICKETS_OUTAGE_MS,
+      breakerMs: BREAKER_MS,
       random: Math.random,
       now: Date.now,
       ...config,
@@ -35,10 +52,24 @@ export class LegacyGateway {
   configure(config: Partial<OutageConfig>): void {
     this.config = { ...this.config, ...config };
     this.downUntil = 0;
+    this.openUntil = 0;
   }
 
   get isDown(): boolean {
     return this.config.now() < this.downUntil;
+  }
+
+  /** Breaker aberto: a última chamada falhou há menos de `breakerMs`. */
+  get isOpen(): boolean {
+    return this.config.now() < this.openUntil;
+  }
+
+  tripBreaker(): void {
+    this.openUntil = this.config.now() + this.config.breakerMs;
+  }
+
+  closeBreaker(): void {
+    this.openUntil = 0;
   }
 
   call<T>(fn: () => T): T {
@@ -63,18 +94,27 @@ export interface RetryOptions {
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Repete `fn` apenas quando o erro é `TICKET_SERVICE_UNAVAILABLE`. Devolve também quantas tentativas foram feitas. */
+/**
+ * Repete `fn` apenas quando o erro é `TICKET_SERVICE_UNAVAILABLE`. Devolve também quantas tentativas foram feitas.
+ * Circuit breaker: com o breaker aberto (falha recente) a chamada falha na hora, sem tentar nem esperar (`attempts` 0,
+ * `details.circuitOpen`). Quem encontra a falha com o breaker fechado abre o breaker e faz os retries normalmente
+ * (são as sondas); sucesso em qualquer tentativa fecha o breaker.
+ */
 export async function withRetry<T>(fn: () => T | Promise<T>, opts: RetryOptions = {}): Promise<{ result: T; attempts: number }> {
   const delays = opts.delaysMs ?? [700, 1400];
   const retries = opts.retries ?? delays.length;
   const sleep = opts.sleep ?? defaultSleep;
+  if (legacyGateway.isOpen) throw unavailableError(true);
   let attempt = 0;
   for (;;) {
     attempt += 1;
     try {
-      return { result: await fn(), attempts: attempt };
+      const result = await fn();
+      legacyGateway.closeBreaker();
+      return { result, attempts: attempt };
     } catch (e) {
       const retryable = e instanceof AppError && e.code === "TICKET_SERVICE_UNAVAILABLE";
+      if (retryable) legacyGateway.tripBreaker();
       if (!retryable || attempt > retries) throw e;
       opts.onRetry?.(attempt);
       await sleep(delays[attempt - 1] ?? delays[delays.length - 1] ?? 500);

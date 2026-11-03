@@ -6,7 +6,7 @@
  *   NEXO_DB_PATH=./data/load.db npm run load -- --base http://localhost:3100 --employees 2000 --concurrency 100
  *
  * Cada funcionário virtual: login → lista conversas → cria conversa → M mensagens por SSE (uma delas barrada por regra),
- * cada uma seguida do polling incremental → lista os próprios chamados. Confere privacidade (só vê o que é dele)
+ * cada uma seguida do polling incremental e de um polling ocioso com If-None-Match (304) → lista os próprios chamados. Confere privacidade (só vê o que é dele)
  * e imprime latências por endpoint (p50/p95/p99), erros e vazão. Sai com código 1 se houver violação de privacidade.
  * @wiki docs/brain/conventions/LoadTesting.md
  */
@@ -51,7 +51,7 @@ const SCRIPT = ["como estão meus chamados abertos?", "minha vpn dá erro 809 no
 
 const samples = new Map<string, number[]>();
 const errors = new Map<string, number>();
-const counters = { turns: 0, ruleReplies: 0, sseErrors: 0, privacyViolations: 0, httpErrors: 0, legacyUnavailable: 0 };
+const counters = { turns: 0, ruleReplies: 0, sseErrors: 0, privacyViolations: 0, httpErrors: 0, legacyUnavailable: 0, idle304: 0 };
 
 function record(name: string, ms: number, ok: boolean): void {
   (samples.get(name) ?? samples.set(name, []).get(name)!).push(ms);
@@ -62,16 +62,22 @@ const pct = (sorted: number[], p: number) => sorted[Math.min(sorted.length - 1, 
 
 // ---- cliente HTTP (o mesmo contrato de src/lib/api.ts) ---------------------------------------------------------
 
-async function call(base: string, name: string, path: string, init: RequestInit & { token?: string } = {}): Promise<{ status: number; json: any }> {
+async function call(
+  base: string, name: string, path: string, init: RequestInit & { token?: string; etag?: string } = {},
+): Promise<{ status: number; json: any; etag?: string }> {
   const t0 = performance.now();
-  const headers: Record<string, string> = { "content-type": "application/json", ...(init.token ? { authorization: `Bearer ${init.token}` } : {}) };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
+    ...(init.etag ? { "if-none-match": init.etag } : {}),
+  };
   try {
     const res = await fetch(`${base}${path}`, { ...init, headers });
-    const json = await res.json().catch(() => undefined);
+    const json = res.status === 304 ? undefined : await res.json().catch(() => undefined);
     const ok = res.status < 400;
     record(name, performance.now() - t0, ok);
     if (!ok) counters.httpErrors += 1;
-    return { status: res.status, json };
+    return { status: res.status, json, etag: res.headers.get("etag") ?? undefined };
   } catch (e) {
     record(name, performance.now() - t0, false);
     counters.httpErrors += 1;
@@ -153,8 +159,13 @@ async function virtualEmployee(o: Options, n: number): Promise<void> {
   for (let i = 0; i < o.messages; i += 1) {
     const r = await sendMessage(o.base, token, convId, SCRIPT[i % SCRIPT.length]!);
     if (r.lastId) lastId = r.lastId;
-    const poll = await call(o.base, "messages.poll", `/api/conversations/${encodeURIComponent(convId)}/messages?after=${encodeURIComponent(lastId)}`, { token });
+    const pollPath = `/api/conversations/${encodeURIComponent(convId)}/messages?after=${encodeURIComponent(lastId)}`;
+    const poll = await call(o.base, "messages.poll", pollPath, { token });
     if (poll.json?.conversation && poll.json.conversation.employeeId !== me) counters.privacyViolations += 1;
+    // Polling ocioso (o caso comum da aba aberta): nada mudou desde o último ciclo → 304 sem corpo.
+    const idle = await call(o.base, "messages.poll (ocioso, If-None-Match)", pollPath, { token, etag: poll.etag });
+    if (idle.status === 304) counters.idle304 += 1;
+    else if (idle.json?.conversation && idle.json.conversation.employeeId !== me) counters.privacyViolations += 1;
     if (o.thinkMs) await sleep(o.thinkMs);
   }
 
@@ -194,7 +205,7 @@ function report(o: Options, totalMs: number): void {
   console.log(`funcionários: ${o.employees} · concorrência: ${o.concurrency} · mensagens por funcionário: ${o.messages}`);
   console.log(`duração: ${(totalMs / 1000).toFixed(1)} s · requisições: ${requests} (${(requests / (totalMs / 1000)).toFixed(0)} req/s) · turnos: ${counters.turns} (${(counters.turns / (totalMs / 1000)).toFixed(1)} turnos/s)`);
   console.log(`respondidas por regra (sem modelo): ${counters.ruleReplies} · legado indisponível no turno: ${counters.legacyUnavailable} · eventos error no SSE: ${counters.sseErrors} · HTTP ≥ 400 ou rede: ${counters.httpErrors}`);
-  console.log(`violações de privacidade: ${counters.privacyViolations}`);
+  console.log(`polling ocioso respondido com 304: ${counters.idle304} · violações de privacidade: ${counters.privacyViolations}`);
 }
 
 async function main(): Promise<void> {

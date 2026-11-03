@@ -66,13 +66,30 @@ export function setDefaultRunner(runner?: AgentRunner): void {
 /** Produção: Mastra com o modelo de `NEXO_MODEL`; `stub/...` (carga, demo sem provedor) usa o runner determinístico. */
 const productionRunner = (): AgentRunner => (isStubModel(env().NEXO_MODEL) ? createStubRunner() : createMastraRunner());
 
+/**
+ * Conversas com turno em andamento (por processo). Um turno por conversa: o segundo envio enquanto o agent
+ * responde é recusado (409 TURN_IN_PROGRESS) em vez de rodar outro turno (e outra chamada ao modelo) em paralelo.
+ */
+const turnsInFlight = new Set<string>();
+
 export async function runTurn(p: TurnParams): Promise<TurnResult> {
+  const conv = getConversation(p.conversationId);
+  if (!conv || conv.employeeId !== p.user.id) throw new AppError("NOT_FOUND", "Conversa não encontrada", 404);
+  if (turnsInFlight.has(conv.id)) throw new AppError("TURN_IN_PROGRESS", "Aguarde a resposta anterior antes de enviar outra mensagem.", 409);
+  turnsInFlight.add(conv.id);
+  try {
+    return await runTurnLocked(p, conv);
+  } finally {
+    turnsInFlight.delete(conv.id);
+  }
+}
+
+async function runTurnLocked(p: TurnParams, initial: Conversation): Promise<TurnResult> {
   const now = p.now ?? new Date();
   const emit: Emit = p.emit ?? (() => {});
   const runner = p.runner ?? (defaultRunner ??= productionRunner());
 
-  let conv = getConversation(p.conversationId);
-  if (!conv || conv.employeeId !== p.user.id) throw new AppError("NOT_FOUND", "Conversa não encontrada", 404);
+  let conv = initial;
   const config = getAssistant(conv.assistantId);
   if (conv.state === "closed") throw new AppError("CONVERSATION_CLOSED", "Esta conversa foi encerrada. Inicie uma nova conversa.", 409);
   if (conv.userMessageCount >= config.limits.maxUserMessages) {

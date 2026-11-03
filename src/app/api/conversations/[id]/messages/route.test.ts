@@ -29,6 +29,17 @@ test("POST em JSON devolve mensagens produzidas e conversa", async () => {
 
   const after = await call(GET, { headers: as("emp-ana"), params: { id: conv.id }, url: "http://x/api?after=0" });
   assert.deepEqual(after.json.messages.map((m: { role: string }) => m.role), ["user", "agent"]);
+  // Polling ocioso: mesmo estado → 304 sem corpo; mensagem nova → 200 com outro ETag.
+  const etag = after.res.headers.get("etag")!;
+  assert.match(etag, /^W\/"/);
+  const idle = await call(GET, { headers: { ...as("emp-ana"), "if-none-match": etag }, params: { id: conv.id }, url: "http://x/api?after=2" });
+  assert.equal(idle.status, 304);
+  assert.equal(idle.json, null);
+  await call(POST, { headers: as("emp-ana"), params: { id: conv.id }, body: { text: "e o erro 809 continua" } });
+  const changed = await call(GET, { headers: { ...as("emp-ana"), "if-none-match": etag }, params: { id: conv.id }, url: "http://x/api?after=2" });
+  assert.equal(changed.status, 200);
+  assert.notEqual(changed.res.headers.get("etag"), etag);
+  assert.deepEqual(changed.json.messages.map((m: { role: string }) => m.role), ["user", "agent"]);
   assert.equal((await call(POST, { headers: as("an-fabio", "analyst"), params: { id: conv.id }, body: { text: "x" } })).status, 403);
   assert.equal((await call(POST, { headers: as("emp-ana"), params: { id: conv.id }, body: {} })).status, 400);
 });

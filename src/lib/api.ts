@@ -175,11 +175,26 @@ export const api = {
     return { conversation: d.conversation, messages: d.messages.map(toMessage) };
   },
   /** Polling incremental: estado atual, mensagens com id > afterId e se o analista está digitando. */
-  async messagesAfter(id: string, afterId: string) {
-    const d = await request<{ conversation: Conversation; messages: RawMessage[]; typing?: { analyst: boolean } }>(
-      `/api/conversations/${encodeURIComponent(id)}/messages?after=${encodeURIComponent(afterId)}`,
-    );
-    return { conversation: d.conversation, messages: d.messages.map(toMessage), analystTyping: d.typing?.analyst ?? false };
+  /**
+   * Polling incremental. Com `etag` da resposta anterior, o servidor devolve 304 quando nada mudou
+   * (`{ changed: false }`); senão, as mensagens novas e o `etag` para o próximo ciclo.
+   */
+  async messagesAfter(id: string, afterId: string, etag?: string) {
+    const res = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages?after=${encodeURIComponent(afterId)}`, {
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", ...(etag ? { "if-none-match": etag } : {}) },
+    });
+    if (res.status === 304) return { changed: false as const };
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(String(body.error ?? "ERROR"), res.status, body.message);
+    const d = body as { conversation: Conversation; messages: RawMessage[]; typing?: { analyst: boolean } };
+    return {
+      changed: true as const,
+      etag: res.headers.get("etag") ?? undefined,
+      conversation: d.conversation,
+      messages: d.messages.map(toMessage),
+      analystTyping: d.typing?.analyst ?? false,
+    };
   },
   /** Avisa que o funcionário está digitando (reenviar a cada ~1,5 s enquanto digita). */
   typing: (id: string) => request<{ ok: true }>(`/api/conversations/${encodeURIComponent(id)}/typing`, { method: "POST", body: "{}" }),

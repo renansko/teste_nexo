@@ -15,6 +15,7 @@ import {
   type TraceAction,
 } from "@/lib/api";
 import { checkInput } from "@/engine/conversation/inputGuard";
+import { usePolling } from "@/lib/usePolling";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import styles from "./Chat.module.css";
@@ -30,11 +31,12 @@ const ERRORS: Record<string, string> = {
   MESSAGE_LIMIT: "Esta conversa chegou ao limite de mensagens. Comece uma nova conversa para continuar.",
   CONVERSATION_CLOSED: "Esta conversa foi encerrada. Comece uma nova conversa para continuar.",
   AGENT_ERROR: "O assistente não conseguiu responder agora. Tente de novo em instantes.",
+  TURN_IN_PROGRESS: "Aguarde a resposta anterior antes de enviar outra mensagem.",
 };
 
 const EMPTY_TURN: { actions: TraceAction[]; text: string } = { actions: [], text: "" };
 
-/** Polling de respostas do analista: mais frequente quando há analista envolvido (também traz o "digitando…"). */
+/** Polling de respostas do analista: mais frequente quando há analista envolvido (também traz o "digitando…"); pausa com a aba oculta. */
 const POLL_ANALYST_MS = 2000;
 const POLL_AGENT_MS = 6000;
 /** Ritmo do aviso "estou digitando" (menor que o TTL do servidor, 4 s). */
@@ -55,6 +57,8 @@ export function ChatScreen() {
   const typingSentRef = useRef(0);
   const lastIdRef = useRef<string | undefined>(undefined);
   lastIdRef.current = messages.filter((m) => !m.id.startsWith("tmp-")).at(-1)?.id;
+  /** ETag do último polling (por conversa): com ele o servidor responde 304 quando nada mudou. */
+  const etagRef = useRef<{ convId: string; etag?: string }>({ convId: "" });
 
   const load = useCallback(async (id: string) => {
     const data = await api.getConversation(id);
@@ -76,25 +80,29 @@ export function ChatScreen() {
 
   const convId = conversation?.id;
   const state = conversation?.state;
-  useEffect(() => {
-    if (!convId || !state || state === "closed" || sending) return;
-    const t = setInterval(async () => {
+  usePolling(
+    async () => {
+      if (!convId) return;
       try {
-        const fresh = await api.messagesAfter(convId, lastIdRef.current ?? "0");
+        const known = etagRef.current.convId === convId ? etagRef.current.etag : undefined;
+        const fresh = await api.messagesAfter(convId, lastIdRef.current ?? "0", known);
+        if (!fresh.changed) return;
+        etagRef.current = { convId, etag: fresh.etag };
         setConversation(fresh.conversation);
         setAnalystTyping(fresh.conversation.state === "analyst" && fresh.analystTyping);
         if (fresh.messages.length) {
           setMessages((prev) => {
-            const known = new Set(prev.map((m) => m.id));
-            return [...prev, ...fresh.messages.filter((m) => !known.has(m.id))];
+            const seen = new Set(prev.map((m) => m.id));
+            return [...prev, ...fresh.messages.filter((m) => !seen.has(m.id))];
           });
         }
       } catch {
         /* falha transitória de polling: tenta no próximo ciclo */
       }
-    }, state === "agent" ? POLL_AGENT_MS : POLL_ANALYST_MS);
-    return () => clearInterval(t);
-  }, [convId, state, sending]);
+    },
+    state === "agent" ? POLL_AGENT_MS : POLL_ANALYST_MS,
+    !!convId && !!state && state !== "closed" && !sending,
+  );
 
   async function send(input: SendInput, display: string) {
     setError(undefined);

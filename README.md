@@ -236,7 +236,8 @@ flowchart TD
 
 - Chave de idempotência única em `tickets`/`ticket_updates`: reexecutar nunca grava duas vezes ([ActionQueue](docs/brain/services/ActionQueue.md)).
 - Duplicidade em três camadas: o agent indica o chamado relacionado, o rascunho compara por similaridade, o serviço recompara na transação de gravação.
-- Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. Legado fora (`NEXO_TICKETS_OUTAGE_RATE`) tem retry com backoff ([LegacyOutage](docs/brain/conventions/LegacyOutage.md)).
+- Tools nunca lançam para dentro do modelo: erro vira `{ error, message }` e nota no trace. Legado fora (`NEXO_TICKETS_OUTAGE_RATE`) tem retry com backoff e circuit breaker: quem encontra a falha faz as tentativas; quem chega nos 2 s seguintes recebe "instável" na hora, sem segurar a conexão ([LegacyOutage](docs/brain/conventions/LegacyOutage.md)).
+- Throttling onde limita custo sem recusar tráfego legítimo: um turno por conversa por vez (`409 TURN_IN_PROGRESS`, o segundo envio não vira outra chamada ao modelo), limite de 30 mensagens por conversa, polling do funcionário e do console com `ETag`/`304` e pausado com a aba oculta. Rate limit por IP ficou de fora: em 2.000 pessoas o problema é o volume agregado, e um `429` só trocaria lentidão por recusa.
 - Testes: regras em `src/services/tickets/*.test.ts`, runner roteirizado sem rede, integração com modelo Mastra simulado, ponta a ponta de duplicidade em `src/assistants/nexo/flows/dedup.validation.test.ts`.
 
 ### Carga: 2.000 funcionários sem custo de modelo
@@ -250,17 +251,20 @@ NODE_ENV=production NEXO_MODEL=stub/nexo NEXO_FAST_MODEL=stub/nexo NEXO_AUTH_SEC
 NEXO_DB_PATH=$PWD/data/load.db npm run load -- --base http://localhost:3100 --employees 2000 --concurrency 100
 ```
 
-O script cria 2.000 funcionários de carga no banco, e cada um faz login, lista conversas, abre uma, manda 4 mensagens por SSE (chamados, central, uma barrada por regra, texto livre) com o polling incremental entre elas e lista os próprios chamados, conferindo que só vê o que é dele. Resultado medido (WSL2, 16 vCPU, um processo Node, 100 em paralelo):
+O script cria 2.000 funcionários de carga no banco, e cada um faz login, lista conversas, abre uma, manda 4 mensagens por SSE (chamados, central, uma barrada por regra, texto livre), cada uma seguida do polling incremental e de um polling ocioso com `If-None-Match` (o caso comum da aba aberta), e lista os próprios chamados, conferindo que só vê o que é dele. Resultado medido (WSL2, 16 vCPU, um processo Node, 100 em paralelo, `NEXO_TICKETS_OUTAGE_RATE=0`):
 
 | endpoint | n | erros | p50 ms | p95 ms | p99 ms |
 |---|---:|---:|---:|---:|---:|
-| `POST /api/auth/login` | 2000 | 0 | 459 | 1226 | 1445 |
-| `POST /api/conversations` | 2000 | 1 | 784 | 1455 | 8329 |
-| turno por SSE (até `message.end`) | 7996 | 0 | 1167 | 1543 | 3514 |
-| `GET .../messages?after=` (polling) | 7996 | 0 | 1137 | 1492 | 2314 |
-| `GET /api/tickets` | 1999 | 0 | 676 | 1263 | 1581 |
+| `POST /api/auth/login` | 2000 | 0 | 394 | 867 | 1184 |
+| `POST /api/conversations` | 2000 | 1 | 596 | 1092 | 1602 |
+| turno por SSE (até `message.end`) | 7996 | 0 | 714 | 1167 | 7562 |
+| `GET .../messages?after=` (polling) | 7996 | 0 | 694 | 1092 | 1562 |
+| idem, ocioso com `If-None-Match` (304) | 7996 | 0 | 652 | 934 | 1380 |
+| `GET /api/tickets` | 1999 | 0 | 414 | 862 | 1153 |
 
-~100 req/s e ~33 turnos/s por processo, zero violação de privacidade, zero evento `error` no SSE, 2.000 mensagens respondidas por regra sem modelo. Com 100 clientes em laço fechado a latência é concorrência ÷ vazão, por isso o p50 fica em ~1 s: o limite é o processo único com SQLite síncrono, não a rede. Com a simulação do legado ligada (`NEXO_TICKETS_OUTAGE_RATE=0.05`, padrão), a vazão é a mesma, mas como a probabilidade é por chamada o legado fica "fora" quase o tempo todo sob carga: 54% dos turnos que consultam chamados responderam "instável agora" após os retries (sem erro no chat) e 66% dos `GET /api/tickets` deram 503. É a simulação escalando com o tráfego, não um defeito do engine. O teste achou e corrigiu um defeito real: `database is locked` no worker da fila quando outro processo escreve (faltava `busy_timeout`). Para 2.000 abas abertas ao mesmo tempo, o próximo gargalo é o polling do funcionário (6 s em `agent`): SSE também para ele e polling só com a aba visível são os passos seguintes.
+~149 req/s e ~37 turnos/s por processo (a primeira rodada, antes do breaker, do 304 e da trava de turno, deu ~100 req/s, ~33 turnos/s e p50 do turno de 1,2 s), zero violação de privacidade, zero evento `error` no SSE, 2.000 mensagens respondidas por regra sem modelo, 7.996 de 7.996 pollings ociosos em 304. Com 100 clientes em laço fechado a latência é concorrência ÷ vazão, por isso o p50 fica em ~0,7 s: o limite é o processo único com SQLite síncrono, não a rede.
+
+Com a simulação do legado ligada (`NEXO_TICKETS_OUTAGE_RATE=0.05`, padrão), a vazão é a mesma. Como a probabilidade é por chamada, sob carga as janelas de 2 s se encadeiam e o legado fica "fora" quase o tempo todo; o que o breaker muda é o custo disso: o p95 do turno que consulta chamados caiu de 3,4 s para 1,2 s e o p50 do `GET /api/tickets` de 2,9 s para 0,4 s, porque ninguém mais espera 2,1 s de retries para receber a mesma resposta "instável". Em troca, mais turnos recebem essa resposta na hora (84%, antes 54%). É a simulação escalando com o tráfego, não um defeito do engine. O teste achou e corrigiu um defeito real: `database is locked` no worker da fila quando outro processo escreve (faltava `busy_timeout`). Para 2.000 abas abertas e visíveis ao mesmo tempo, o polling ainda é o gargalo (~330 req/s, agora quase todo 304): SSE também para o funcionário é o passo seguinte.
 
 ## 8. Transparência
 
@@ -293,7 +297,8 @@ curl -N localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $
 | **Tipo/categoria sem LLM extra** | classificador por mensagem | o agent pré-preenche o que extraiu e a tool pergunta o resto com opções; previsível, ao preço de uma pergunta a mais |
 | **Busca e duplicidade lexicais** | RAG / embeddings | determinístico e suficiente para dezenas de itens; sinônimos ficam com o `relatedTicketId` que o agent indica e o código confere; embeddings entram trocando só `searchKnowledge` |
 | **Outbox em SQLite, worker no processo** | executar na hora e torcer | confirmação nunca se perde; em produção o worker seria dedicado e a presença "digitando…" iria para um store compartilhado |
-| **Polling no console** | SSE por conversa | funciona em qualquer hospedagem; SSE é o passo seguinte |
+| **Polling no console** | SSE por conversa | funciona em qualquer hospedagem; `ETag`/`304` e pausa com a aba oculta tiram quase todo o custo; SSE é o passo seguinte |
+| **Throttling por conversa e breaker, sem rate limit por IP** | `429` por usuário/IP | o custo por pessoa já é limitado (um turno por vez, 30 mensagens); com 2.000 pessoas legítimas um `429` só troca lentidão por recusa; o próximo guarda-corpo é um semáforo nas chamadas ao modelo (limite real: RPM/TPM do provedor) |
 | **Confiança categórica** | percentual | o modelo não é calibrado; um número daria precisão falsa |
 | **Validação de entrada por regex** | classificador por mensagem | custo zero e sem falso positivo em mensagens curtas legítimas ("oi", "vpn"); palavras reais sem sentido ainda vão ao modelo, que pede detalhes (seção 4) |
 
